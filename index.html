@@ -1,0 +1,1896 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Waypoint Trip Planner</title>
+<meta name="description" content="Plan flights, stays and days for any trip.">
+<meta name="theme-color" content="#0d1722">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Waypoint">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600;700&display=swap">
+<style>
+
+/* Layout: one phone-width column. The trip is a rail line: each day is a stop, coloured by the city you sleep in; nights with no stay are dashed. */
+:root{
+  --paper:#eef1f4; --card:#ffffff; --ink:#14202e; --mut:#586674; --line:#d9e0e7; --soft:#e5eaf0;
+  --rose:#c4306f; --rose-ink:#ffffff; --rose-soft:#f8e2ec;
+  --ok:#17744b; --ok-soft:#dff3e8; --warn:#a64b08; --warn-soft:#fdeedb;
+  --f-disp:"Bricolage Grotesque","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+  --f-body:"Instrument Sans","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+  --sh:0 1px 2px rgba(20,32,46,.06),0 8px 24px rgba(20,32,46,.06);
+  color-scheme:light;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0d141c; --card:#16202b; --ink:#e8eef4; --mut:#9aa8b6; --line:#26323e; --soft:#1f2b37;
+  --rose:#ff7fae; --rose-ink:#2a0d1a; --rose-soft:#3a1827;
+  --ok:#62d19d; --ok-soft:#14301f; --warn:#f2a661; --warn-soft:#3a2a17; --sh:none; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --paper:#0d141c; --card:#16202b; --ink:#e8eef4; --mut:#9aa8b6; --line:#26323e; --soft:#1f2b37;
+  --rose:#ff7fae; --rose-ink:#2a0d1a; --rose-soft:#3a1827;
+  --ok:#62d19d; --ok-soft:#14301f; --warn:#f2a661; --warn-soft:#3a2a17; --sh:none; color-scheme:dark;}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.55 var(--f-body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:0 96px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:720px;margin:0 auto}
+h1,h2,h3,p{margin:0}
+h1,h2,h3,.disp{font-family:var(--f-disp);text-wrap:balance}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--rose);outline-offset:2px;border-radius:6px}
+a{color:var(--rose)}
+.num{font-variant-numeric:tabular-nums}
+.sub{color:var(--mut);font-size:13px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* header */
+.hdr{padding:20px 0 14px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.hdr .kan{font-family:var(--f-disp);font-weight:700;color:var(--rose);font-size:14px;letter-spacing:.04em}
+.hdr h1{font-size:32px;font-weight:900;line-height:1.1;margin-top:2px}
+.hdr .meta{margin-top:6px;color:var(--mut);font-size:14px}
+.hdr .side{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex:none}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:99px;padding:5px 12px;background:var(--rose-soft);color:var(--rose);font-weight:700;font-size:13px;font-family:var(--f-disp)}
+.iconbtn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);display:grid;place-items:center}
+.iconbtn svg{width:20px;height:20px}
+
+/* bottom nav */
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--card);border-top:1px solid var(--line);
+  padding:6px max(8px,env(safe-area-inset-left,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-right,0px));
+  display:flex;justify-content:center}
+.nav .in{display:grid;grid-template-columns:repeat(5,1fr);gap:2px;width:100%;max-width:720px}
+.nav button{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;border-radius:12px;color:var(--mut);font-size:12px;font-family:var(--f-disp);font-weight:500;min-height:54px}
+.nav button svg{width:23px;height:23px}
+.nav button[aria-current="page"]{color:var(--rose);font-weight:700}
+.nav button[aria-current="page"] svg{stroke-width:2.4}
+
+/* general blocks */
+.sec{margin:22px 0 10px;display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.sec h2{font-size:20px;font-weight:700}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;box-shadow:var(--sh)}
+.card+.card{margin-top:12px}
+.btn{border:0;border-radius:12px;padding:10px 16px;font-weight:700;font-family:var(--f-disp);background:var(--soft);min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;color:var(--ink)}
+.btn.pri{background:var(--rose);color:var(--rose-ink)}
+.btn.sm{padding:6px 12px;min-height:36px;font-size:14px;border-radius:10px}
+.btn.ghost{background:none;border:1px solid var(--line)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.linkbtn{background:none;border:0;color:var(--rose);font-weight:700;padding:6px 2px;min-height:36px;font-family:var(--f-disp)}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--line);background:var(--card);border-radius:99px;padding:6px 14px;font-size:14px;min-height:36px;font-family:var(--f-disp);font-weight:500}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.seg{display:inline-grid;grid-auto-flow:column;background:var(--soft);border-radius:12px;padding:3px;gap:2px}
+.seg button{border:0;background:none;border-radius:9px;padding:6px 14px;font-family:var(--f-disp);font-weight:700;font-size:14px;min-height:34px;color:var(--mut)}
+.seg button[aria-pressed="true"]{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+label.f{display:grid;gap:4px;font-size:13px;color:var(--mut);font-family:var(--f-disp);font-weight:500;min-width:0}
+input[type=date],input[type=time],input[type=number],input[type=text],select{width:100%;min-width:0;height:44px;border:1px solid var(--line);background:var(--paper);border-radius:10px;padding:0 10px;color:var(--ink);font-size:15px}
+input::placeholder{color:var(--mut)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.stack{display:grid;gap:12px}
+.note{font-size:13px;color:var(--mut)}
+.warnbox{background:var(--warn-soft);color:var(--warn);border-radius:10px;padding:8px 12px;font-size:14px}
+.okbox{background:var(--ok-soft);color:var(--ok);border-radius:10px;padding:8px 12px;font-size:14px}
+
+/* to-sort list */
+.todo{display:grid;gap:8px}
+.todo .row{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.todo .row b{font-family:var(--f-disp);font-weight:700;display:block;font-size:15px}
+.todo .row span{font-size:13px;color:var(--mut)}
+
+/* glance calendar */
+.cal{display:grid;gap:14px}
+.cal h3{font-size:15px;margin-bottom:6px}
+.cal .g{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;text-align:center}
+.cal .dow{font-size:12px;color:var(--mut);font-family:var(--f-disp)}
+.cal .c{aspect-ratio:1/1;max-height:46px;border-radius:10px;display:grid;place-items:center;font-size:14px;font-family:var(--f-disp);font-weight:500;position:relative;border:1px solid transparent;background:none;padding:0;color:var(--mut)}
+.cal .c.in{color:var(--ink);background:color-mix(in srgb,var(--lc,var(--mut)) 22%,var(--card));border-color:color-mix(in srgb,var(--lc,var(--mut)) 55%,transparent)}
+.cal .c.vac{color:var(--ink);border:1px dashed var(--mut)}
+.cal .c.today{box-shadow:0 0 0 2px var(--rose)}
+.cal .c .fl{position:absolute;right:3px;top:2px;width:7px;height:7px;border-radius:50%;background:var(--rose)}
+.cal .c.empty{visibility:hidden}
+
+/* rail */
+.rail{margin-top:4px}
+.day{display:grid;grid-template-columns:40px minmax(0,1fr);column-gap:8px}
+.spine{position:relative}
+.spine::before{content:"";position:absolute;left:18px;top:0;bottom:0;width:4px;border-radius:2px;background:var(--lc,var(--mut))}
+.day.first .spine::before{top:30px}
+.day.last .spine::before{bottom:auto;height:30px}
+.day.vac .spine::before{background:repeating-linear-gradient(to bottom,var(--mut) 0 6px,transparent 6px 11px);opacity:.55}
+.node{position:absolute;left:10px;top:22px;width:20px;height:20px;border-radius:50%;background:var(--card);border:5px solid var(--lc,var(--mut))}
+.day.vac .node{border-style:dashed;border-color:var(--mut)}
+.dcard{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 14px;margin-bottom:12px;box-shadow:var(--sh);min-width:0;scroll-margin-top:16px}
+.dh{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.dh .d{font-family:var(--f-disp);font-weight:900;font-size:22px;line-height:1.1}
+.dh .m{font-family:var(--f-disp);font-weight:500;color:var(--mut)}
+.dh .tag{margin-left:auto}
+.tag{display:inline-flex;align-items:center;border-radius:8px;padding:2px 8px;font-size:12px;font-family:var(--f-disp);font-weight:700;background:var(--soft);color:var(--ink)}
+.tag.rose{background:var(--rose-soft);color:var(--rose)}
+.tag.ok{background:var(--ok-soft);color:var(--ok)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.tag.city{background:color-mix(in srgb,var(--c,var(--mut)) 18%,var(--card));color:var(--ink);border:1px solid color-mix(in srgb,var(--c,var(--mut)) 45%,transparent)}
+.dline{margin-top:8px;font-size:14px;display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap}
+.dline b{font-family:var(--f-disp);font-weight:700}
+.vacbox{margin-top:10px;border:1.5px dashed var(--mut);border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.fchip{margin-top:8px;display:flex;gap:10px;align-items:center;background:var(--soft);border-radius:12px;padding:8px 12px;font-size:14px}
+.fchip svg{width:18px;height:18px;flex:none;color:var(--rose)}
+.item{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.item:first-of-type{margin-top:8px}
+.item input[type=time]{height:38px;padding:0 6px;font-size:14px}
+.item .t{min-width:0}
+.item .t b{font-family:var(--f-disp);font-weight:700;font-size:14.5px;display:block;overflow-wrap:anywhere}
+.item .t span{font-size:12.5px;color:var(--mut)}
+.xbtn{border:0;background:none;color:var(--mut);width:36px;height:36px;border-radius:10px;font-size:20px;line-height:1}
+.dfoot{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+.dsum{font-size:13px;color:var(--mut)}
+
+/* line badge */
+.ln{display:inline-grid;place-items:center;min-width:20px;height:20px;border-radius:50%;background:var(--lc,var(--mut));color:#fff;font-family:var(--f-disp);font-weight:900;font-size:10.5px;padding:0 3px;flex:none}
+
+/* budget */
+.bud .row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line);font-size:14.5px}
+.bud .row:last-of-type{border:0}
+.bud .tot{display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;font-family:var(--f-disp)}
+.bud .tot b{font-size:26px;font-weight:900}
+
+/* flights */
+.fl h2{font-size:19px;font-weight:700;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.fl .route{font-weight:500;color:var(--mut);font-size:14px}
+.land{margin-top:12px;border-radius:14px;background:var(--soft);padding:12px 14px}
+.land .big{font-family:var(--f-disp);font-weight:900;font-size:24px;line-height:1.15}
+.land .row{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px;font-size:14px}
+.land .row span b{font-family:var(--f-disp)}
+
+/* explore + stays cards */
+.spot{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;box-shadow:var(--sh);display:grid;gap:6px;min-width:0}
+.spot+.spot{margin-top:12px}
+.spot .top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.spot h3{font-size:18px;font-weight:700;line-height:1.25}
+.spot .where{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13.5px;color:var(--mut)}
+.spot .tip{font-size:14px}
+.spot .meta{display:flex;gap:6px 16px;flex-wrap:wrap;font-size:14px;align-items:center}
+.spot .meta span{display:inline-flex;gap:6px;align-items:center}
+.spot .meta svg{width:16px;height:16px;color:var(--mut)}
+.spot .act{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.tier{font-family:var(--f-disp);font-weight:900;font-size:12.5px;border-radius:8px;padding:2px 8px}
+.t-must{background:var(--rose);color:var(--rose-ink)}
+.t-great{background:var(--ink);color:var(--paper)}
+.t-good{background:var(--soft);color:var(--ink)}
+.score{font-family:var(--f-disp);font-weight:700;font-size:14px}
+.yen{font-family:var(--f-disp);font-weight:700}
+.target{display:flex;justify-content:space-between;gap:10px;align-items:center;background:var(--rose-soft);color:var(--ink);border-radius:14px;padding:10px 14px;margin-bottom:10px}
+.mapbox{border:1px solid var(--line);border-radius:16px;background:var(--card);overflow:hidden;margin-bottom:12px}
+.mapbox svg{display:block;width:100%;height:auto}
+.legend{display:flex;gap:14px;flex-wrap:wrap;padding:8px 12px;font-size:12.5px;color:var(--mut);border-top:1px solid var(--line)}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+
+.stay{display:grid;gap:8px;border-left:6px solid var(--c,var(--mut))}
+.stay h3{font-size:18px;font-weight:700}
+.nearrow{display:flex;gap:8px;flex-wrap:wrap}
+.near{border:1px solid var(--line);background:var(--paper);border-radius:10px;padding:5px 10px;font-size:13px}
+
+/* sheet */
+.scrim{position:fixed;inset:0;background:rgba(8,14,20,.55);z-index:40}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;max-height:92%;overflow:auto;background:var(--paper);border-radius:22px 22px 0 0;
+  padding:14px max(16px,env(safe-area-inset-left,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-right,0px));
+  display:flex;justify-content:center}
+.sheet .in{width:100%;max-width:640px;display:grid;gap:14px;align-content:start}
+.sheet .grab{width:44px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 4px}
+.sheet h2{font-size:22px;font-weight:900}
+.sheet .head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.hotel{width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:grid;gap:3px}
+.hotel b{font-family:var(--f-disp);font-weight:700;font-size:16px}
+.hotel .s{font-size:13px;color:var(--mut)}
+.hotel+.hotel{margin-top:8px}
+.daypick{display:grid;gap:8px}
+.daypick button{display:flex;justify-content:space-between;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-height:48px;font-family:var(--f-disp);font-weight:700;text-align:left}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--ink);color:var(--paper);border-radius:12px;padding:10px 16px;font-family:var(--f-disp);font-weight:700;font-size:14px;max-width:calc(100% - 32px)}
+details.g{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:0 16px;margin-bottom:10px}
+details.g summary{list-style:none;cursor:pointer;padding:14px 0;display:flex;justify-content:space-between;align-items:center;gap:10px;font-family:var(--f-disp);font-weight:700;font-size:17px;min-height:48px}
+details.g summary::-webkit-details-marker{display:none}
+details.g summary::after{content:"+";font-size:22px;color:var(--rose);font-weight:500}
+details.g[open] summary::after{content:"\2212"}
+details.g .body{padding:0 0 14px;display:grid;gap:8px;font-size:14.5px}
+details.g ul{margin:0;padding-left:20px;display:grid;gap:6px}
+.srcs{font-size:13px;color:var(--mut);display:grid;gap:4px}
+.srcs a{color:var(--mut)}
+.empty{border:1.5px dashed var(--line);border-radius:16px;padding:22px 16px;text-align:center;color:var(--mut)}
+@media (max-width:380px){.grid3{grid-template-columns:1fr 1fr}.hdr h1{font-size:28px}}
+@media (prefers-reduced-motion:no-preference){.sheet{animation:up .22s ease-out}@keyframes up{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}}
+
+/* additions */
+.hl{min-width:0}
+.brand{display:inline-flex;align-items:center;gap:8px;font-family:var(--f-disp);font-weight:800;color:var(--rose);font-size:15px;letter-spacing:.02em}
+.brand svg{width:26px;height:26px;border-radius:7px}
+.hdr .btnrow{display:flex;gap:8px}
+.btnrow{display:flex;gap:8px;align-items:center}
+.btnrow.wrapr{flex-wrap:wrap}
+.sortrow{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.chips2{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.banner{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:var(--rose-soft);border-radius:14px;padding:12px 14px;margin-bottom:12px}
+.prog{display:flex;align-items:center;gap:10px;background:var(--soft);border-radius:12px;padding:10px 14px;font-size:14px}
+.spin{width:16px;height:16px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--rose);animation:sp .8s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation-duration:3s}}
+.cta{display:grid;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:var(--sh)}
+.chk{display:flex;gap:10px;align-items:flex-start;padding:7px 0;font-size:14.5px;min-height:40px}
+.chk input{width:22px;height:22px;flex:none;accent-color:var(--rose);margin:0}
+.gh{font-family:var(--f-disp);font-weight:800;font-size:13px;color:var(--rose);text-transform:uppercase;letter-spacing:.06em;margin-top:10px}
+.gh:first-child{margin-top:0}
+.dact{display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tbtn{background:none;border:0;color:inherit;font-weight:800;font-family:var(--f-disp);margin-left:10px;text-decoration:underline;min-height:32px}
+.tag.ai{background:var(--warn-soft);color:var(--warn)}
+.legend i.sq{border-radius:3px}
+textarea{width:100%;border:1px solid var(--line);background:var(--paper);border-radius:10px;padding:10px;color:var(--ink);font-size:15px;resize:vertical}
+input[type=file]{font-size:14px}
+[hidden]{display:none!important}
+.btn svg,.linkbtn svg{width:18px;height:18px;flex:none}
+input[type=time]{padding:0 4px;font-size:14px}
+.item{grid-template-columns:100px minmax(0,1fr) auto}
+.sec{flex-wrap:wrap}
+.sec h2{white-space:nowrap}
+.tm{display:inline-flex;align-items:center;gap:2px}
+.tm select{width:auto;min-width:0;padding:0 4px;height:44px;flex:1 1 0;text-align:center;appearance:none;-webkit-appearance:none;background-image:none}
+.tm b{color:var(--mut)}
+.item .tm select{height:38px;font-size:14px}
+.viarow{display:grid;grid-template-columns:minmax(0,1fr) 92px 36px;gap:8px;align-items:end}
+.stopinfo{background:var(--soft);border-radius:10px;padding:8px 12px;font-size:13.5px;display:grid;gap:4px}
+.hotel.quick{border-style:dashed;margin-bottom:8px}
+.grid3 .f{min-width:0}
+.tm{display:flex;width:100%}.tm select{padding:0 2px}
+.chip.add{border-style:dashed;color:var(--rose);font-weight:700}
+.searchrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+.searchrow input{height:44px}
+.chips{flex-wrap:wrap;overflow:visible}.chip{flex:0 0 auto}
+
+</style></head><body>
+<div class="wrap">
+<header class="hdr" id="hdr"></header>
+<main id="main" aria-live="polite"></main>
+</div>
+<nav class="nav" id="nav" aria-label="Sections"></nav>
+<div id="sheet"></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<noscript>Waypoint needs JavaScript to run.</noscript>
+
+<script>
+const JP=(function(){
+var CITIES={
+  tokyo:{n:'Tokyo',jp:'東京',c:'#f39700',lat:35.69,lon:139.76},
+  kyoto:{n:'Kyoto',jp:'京都',c:'#1b9a5a',lat:35.01,lon:135.76},
+  osaka:{n:'Osaka',jp:'大阪',c:'#e5171f',lat:34.68,lon:135.50},
+  nara:{n:'Nara',jp:'奈良',c:'#7b61b3',lat:34.685,lon:135.83},
+  hakone:{n:'Hakone',jp:'箱根',c:'#0b8fc4',lat:35.24,lon:139.05},
+  nikko:{n:'Nikko',jp:'日光',c:'#6b8e23',lat:36.75,lon:139.58},
+  kamakura:{n:'Kamakura',jp:'鎌倉',c:'#2d7f9d',lat:35.32,lon:139.55},
+  fuji:{n:'Mt Fuji (Kawaguchiko)',jp:'富士',c:'#c24d86',lat:35.50,lon:138.77},
+  hiroshima:{n:'Hiroshima',jp:'広島',c:'#b5651d',lat:34.39,lon:132.46},
+  yokohama:{n:'Yokohama',jp:'横浜',c:'#3b7dd8',lat:35.45,lon:139.64}
+};
+var CORDER=['tokyo','kyoto','osaka','nara','hakone','nikko','kamakura'];
+var CEXTRA=['fuji','hiroshima','yokohama'];
+var LN={G:'#f39700',JY:'#6fa300',H:'#8a8a82',M:'#e5333b',A:'#e85298',E:'#b6007a',U:'#0097a7',T:'#009bbf',JR:'#0f6b4f',K:'#2e9e5b',C:'#00945e',KH:'#1f6fbf'};
+var APTIP={
+  HND:'Haneda is about 30–45 minutes from central Tokyo by train or monorail. Allow 60–90 minutes after landing for immigration and bags.',
+  NRT:'Narita to central Tokyo takes about 40–60 minutes on the Skyliner or Narita Express. Allow 60–90 minutes after landing.',
+  KIX:'From Kansai, the Nankai Rapi:t reaches Namba in about 40 minutes and the JR Haruka reaches Kyoto in about 75 minutes.',
+  SYD:'International check-in at Sydney usually closes 60 minutes before departure.'
+};
+function dep(d1,d2){return function(date){return date>='2026-10-25'?d1:d2}}
+var ROUTES={
+ 'SYD-HND':[
+  {id:'JL52',al:'Japan Airlines',dep:'09:25',dur:575,days:'Daily'},
+  {id:'QF59',al:'Qantas',dep:'12:00',dur:575,days:'Daily'},
+  {id:'NH890',al:'ANA',dep:'12:25',dur:575,days:'Daily'},
+  {id:'QF25',al:'Qantas',dep:'21:30',dur:575,days:'Daily'},
+  {id:'NH880',al:'ANA',dep:'21:45',dur:575,days:'Daily'}],
+ 'SYD-KIX':[{id:'JQ13',al:'Jetstar',dep:'12:00',dur:590,days:'Tue, Thu, Sat',dow:[2,4,6]}],
+ 'HND-SYD':[
+  {id:'JL51',al:'Japan Airlines',dep:'19:15',dur:575,days:'Daily',late:'19:40',lateDur:580,lateUntil:'2026-10-25'},
+  {id:'QF60',al:'Qantas',dep:'22:00',dur:580,days:'Check your booking'},
+  {id:'NH879',al:'ANA',dep:'',dur:580,days:'Enter your time'}],
+ 'SYD-NRT':[
+  {id:'QF79',al:'Qantas',dep:'',dur:580,days:'Enter your time'},
+  {id:'JQ25',al:'Jetstar',dep:'',dur:580,days:'Enter your time'},
+  {id:'JL772',al:'Japan Airlines',dep:'',dur:580,days:'Enter your time'}],
+ 'NRT-SYD':[
+  {id:'QF80',al:'Qantas',dep:'',dur:585,days:'Enter your time'},
+  {id:'JQ26',al:'Jetstar',dep:'',dur:585,days:'Enter your time'},
+  {id:'JL771',al:'Japan Airlines',dep:'',dur:585,days:'Enter your time'}],
+ 'KIX-SYD':[{id:'JQ12',al:'Jetstar',dep:'',dur:570,days:'Enter your time'}]
+};
+var BANDS={1:{s:'¥',mid:10000,t:'about ¥8,000–15,000 a night'},2:{s:'¥¥',mid:20000,t:'about ¥15,000–28,000 a night'},3:{s:'¥¥¥',mid:38000,t:'about ¥28,000–55,000 a night'},4:{s:'¥¥¥¥',mid:75000,t:'¥55,000 a night and up'}};
+var AREAS={
+ tokyo:[['Asakusa',35.7110,139.7960],['Asakusabashi',35.6970,139.7870],['Akihabara',35.6984,139.7731],['Nihonbashi',35.6841,139.7745],['Roppongi',35.6628,139.7314],['Akasaka',35.6760,139.7370],['Ebisu',35.6467,139.7101],['Odaiba',35.6270,139.7750],['Haneda Airport',35.5494,139.7798],['Narita Airport',35.7647,140.3864],['Ueno',35.7141,139.7774],['Tokyo Station',35.6812,139.7671],['Ginza',35.6717,139.7650],['Shinjuku',35.6896,139.7006],['Shibuya',35.6580,139.7016],['Ikebukuro',35.7295,139.7109],['Shinagawa',35.6285,139.7387]],
+ kyoto:[['Kyoto Station',34.9858,135.7588],['Karasuma',35.0045,135.7590],['Higashiyama',34.9950,135.7810],['Kawaramachi',35.0036,135.7685],['Gion',35.0037,135.7756],['Arashiyama',35.0170,135.6780]],
+ osaka:[['Umeda',34.7025,135.4959],['Shinsaibashi',34.6718,135.5014],['Tennoji',34.6465,135.5140],['Namba',34.6659,135.5009],['Shin-Osaka',34.7335,135.5002]],
+ nara:[['Nara Station',34.6815,135.8195]],
+ hakone:[['Hakone-Yumoto',35.2331,139.1050],['Gora',35.2497,139.0521]],
+ nikko:[['Nikko Station',36.7492,139.6244]],
+ kamakura:[['Kamakura Station',35.3194,139.5503]],
+ fuji:[['Kawaguchiko Station',35.4985,138.7682],['Lake Kawaguchi north shore',35.5190,138.7600],['Fujiyoshida',35.4880,138.8070],['Lake Saiko',35.5000,138.6900]],
+ hiroshima:[['Hiroshima Station',34.3976,132.4753],['Peace Park',34.3955,132.4536],['Miyajima',34.2960,132.3198]],
+ yokohama:[['Yokohama Station',35.4658,139.6224],['Minato Mirai',35.4544,139.6320],['Chinatown',35.4425,139.6455]]
+};
+function P(id,n,c,a,lat,lon,k,s,h1,h2,y,yl,st,ln,t){return {id:id,n:n,c:c,a:a,lat:lat,lon:lon,k:k,s:s,h1:h1,h2:h2,y:y,yl:yl,st:st,ln:ln,t:t}}
+var SPOTS=[
+ P('chureito','Chureito Pagoda and Arakurayama Sengen Park','fuji','Fujiyoshida',35.5009,138.8021,'view',4.8,1,1.5,0,'Free','Shimoyoshida','JR','The classic Fuji photo: a red pagoda with the mountain behind it. It is a climb of about 400 steps. Go in the morning when Fuji is usually clearest, and check the weather first. Mid-November is the peak for autumn leaves.'),
+ P('kawaguchi','Lake Kawaguchi and Oishi Park','fuji','Lake Kawaguchi north shore',35.5130,138.7550,'nature',4.6,1.5,2.5,0,'Free','Kawaguchiko','JR','A lakeside walk with the best everyday view of Fuji, and a flat, easy way to see it. The Retro Bus loops round the lake for about ¥1,500 for a day pass. Getting here from Tokyo takes about 2 hours by highway bus from Shinjuku or the Fuji Excursion train.'),
+ P('kachi','Mt Kachi Kachi Ropeway','fuji','Kawaguchiko Station',35.5008,138.7656,'view',4.5,0.75,1.25,900,'About ¥900 return','Kawaguchiko','JR','A short ropeway to a lookout over the lake with Fuji beyond. It is a few minutes from the station, so it fits an arrival afternoon.'),
+ P('oshino','Oshino Hakkai','fuji','Fujiyoshida',35.4592,138.8349,'nature',4.4,1,1.5,0,'Free to walk, small fees for some ponds','','','Eight clear spring-fed ponds in a village with a Fuji view. Touristy but pretty, and good for snacks and souvenirs.'),
+ P('iyashi','Iyashi-no-Sato Nenba','fuji','Lake Saiko',35.4983,138.6747,'culture',4.3,1,1.5,500,'About ¥500','','','A rebuilt village of thatched farmhouses with craft workshops, near Lake Saiko. Quieter than the main lakeside.'),
+ P('hoto','Hoto noodles (Yamanashi speciality)','fuji','Kawaguchiko Station',35.4934,138.7735,'food',4.4,0.75,1.25,1600,'About ¥1,600','Kawaguchiko','JR','Thick flat noodles stewed with pumpkin and vegetables in miso soup. A warming local meal, especially on a cold day.'),
+ P('peace','Hiroshima Peace Memorial Park and Museum','hiroshima','Peace Park',34.3955,132.4536,'culture',4.8,2,3,200,'About ¥200 museum','Genbaku-Dome Mae','','A moving, well-presented museum and park around the Atomic Bomb Dome. Allow time to take it slowly.'),
+ P('miyajima','Itsukushima Shrine and Miyajima','hiroshima','Miyajima',34.2960,132.3198,'sight',4.8,4,6,500,'About ¥300 shrine plus ferry','Miyajimaguchi','JR','The floating torii gate and friendly deer. Check the tide table: high tide for the floating look, low tide to walk to the gate. Allow about 45 minutes each way from Hiroshima.'),
+ P('misen','Mt Misen (Miyajima ropeway)','hiroshima','Miyajima',34.2827,132.3182,'view',4.5,2,3,2000,'About ¥2,000 ropeway return','','','A ropeway and short walk to a view across the Seto Inland Sea. Best on a clear day.'),
+ P('okonomi','Okonomimura (Hiroshima-style okonomiyaki)','hiroshima','Hiroshima Station',34.3943,132.4592,'food',4.4,1,1.5,1500,'About ¥1,500','Hatchobori','','Layered savoury pancakes with noodles, cooked in front of you. Several floors of small counters.'),
+ P('hirocastle','Hiroshima Castle','hiroshima','Peace Park',34.4021,132.4594,'sight',4.1,0.75,1.25,370,'About ¥370','','','A rebuilt castle keep with a small museum. Quick and quiet.'),
+ P('cupnoodle','Cup Noodles Museum Yokohama','yokohama','Minato Mirai',35.4558,139.6406,'fun',4.4,1.5,2,500,'About ¥500 plus make-your-own cup','Minatomirai','','Design your own cup of instant noodles. Book a time slot online in busy periods.'),
+ P('chinatown','Yokohama Chinatown','yokohama','Chinatown',35.4425,139.6455,'food',4.3,1.5,2.5,2000,'About ¥2,000','Motomachi-Chukagai','','Japan\'s largest Chinatown, with street snacks and plenty of restaurants.'),
+ P('sankeien','Sankeien Garden','yokohama','Minato Mirai',35.4172,139.6586,'nature',4.5,1.5,2,900,'About ¥900','','','A traditional garden with historic buildings, away from the city bustle.'),
+ P('yamashita','Yamashita Park and Red Brick Warehouse','yokohama','Minato Mirai',35.4435,139.6500,'sight',4.4,1.5,2.5,0,'Free','Minatomirai','','Harbour walk, red-brick shopping and cafes. Pretty at dusk.'),
+ P('sensoji','Senso-ji and Nakamise-dori','tokyo','Asakusa',35.7148,139.7967,'sight',4.7,1.5,2,0,'','Asakusa','G','Go before 8:00 or after dusk to miss the crowds. The grounds are open all day; the main hall is open 06:00–17:00.'),
+ P('sumida','Sumida River walk to Skytree','tokyo','Asakusa',35.7118,139.8010,'nature',4.3,1,1.5,0,'','Asakusa','G','A flat riverside walk from Asakusa to Oshiage. Lovely at golden hour with Skytree ahead of you.'),
+ P('hoppy','Asakusa snack trail and Hoppy Street','tokyo','Asakusa',35.7126,139.7941,'food',4.3,1.5,2,3000,'About ¥3,000 on food','Asakusa','G','Ningyo-yaki cakes on Nakamise, then nikomi stew and a Hoppy drink at the izakaya on Hoppy Street.'),
+ P('skytree','Tokyo Skytree','tokyo','Oshiage',35.7101,139.8107,'view',4.5,1.5,2,2100,'From about ¥2,100 (Tembo Deck, weekday, booked ahead)','Oshiage','A','Book online. Same-day counter tickets cost more. The 450 m Galleria level is a combo ticket, about ¥1,000 extra.'),
+ P('meiji','Meiji Jingu','tokyo','Harajuku',35.6764,139.6993,'culture',4.7,1,1.5,0,'','Harajuku','JY','A forest walk to a Shinto shrine in the middle of the city. Calm and cool in the morning.'),
+ P('crossing','Shibuya Scramble Crossing','tokyo','Shibuya',35.6595,139.7005,'sight',4.4,0.5,0.75,0,'','Shibuya','G','Best seen from above, from Shibuya Sky or a window overlooking it. Busiest after dark.'),
+ P('shibuyasky','Shibuya Sky','tokyo','Shibuya',35.6585,139.7022,'view',4.7,1,1.5,2700,'¥2,700 online before 15:00, about ¥3,400 later','Shibuya','G','Timed entry. Book a sunset slot a few days ahead; weekends and foliage weeks sell out.'),
+ P('planets','teamLab Planets','tokyo','Toyosu',35.6490,139.7897,'fun',4.7,2,2.5,3800,'¥3,800 weekday, ¥4,200 weekend','Shin-Toyosu','U','You walk barefoot through knee-deep water, so wear shorts you can roll up. Book a timed slot days ahead.'),
+ P('borderless','teamLab Borderless','tokyo','Azabudai Hills',35.6614,139.7406,'fun',4.6,2,3,4000,'About ¥4,000, varies by slot','Kamiyacho','H','Rooms of light and mirrors that flow into one another. Timed slots; book 2–3 weeks ahead if you can.'),
+ P('tsukiji','Tsukiji Outer Market','tokyo','Tsukiji',35.6655,139.7707,'food',4.5,1.5,2,3000,'Free entry, about ¥3,000 on food','Tsukiji','H','Go hungry before 10:00 for tamagoyaki, sushi and grilled seafood. Many stalls close by early afternoon.'),
+ P('ueno','Ueno Park and Ameyoko','tokyo','Ueno',35.7148,139.7745,'sight',4.4,2,3,0,'','Ueno','G','Park, shrines and museums, then Ameyoko market street for snacks and bargains.'),
+ P('tnm','Tokyo National Museum','tokyo','Ueno',35.7188,139.7765,'culture',4.5,2,3,1000,'About ¥1,000','Ueno','G','Japan’s largest collection of samurai swords, art and ceramics. Usually closed on Mondays.'),
+ P('akiba','Akihabara','tokyo','Akihabara',35.6984,139.7731,'fun',4.3,2,3,0,'','Akihabara','JY','Multi-storey arcades, anime shops and retro game stores. Many shops offer tax-free shopping.'),
+ P('takeshita','Harajuku and Takeshita Street','tokyo','Harajuku',35.6705,139.7050,'fun',4.2,1.5,2,0,'','Harajuku','JY','Crowded and colourful. Pair it with Meiji Jingu and a walk down Omotesando.'),
+ P('gyoen','Shinjuku Gyoen','tokyo','Shinjuku',35.6852,139.7100,'nature',4.6,1.5,2,500,'¥500','Shinjuku-gyoenmae','M','Japanese, English and French garden styles in one park. A good place for early autumn colour.'),
+ P('goldengai','Golden Gai and Omoide Yokocho','tokyo','Shinjuku',35.6942,139.7040,'food',4.4,2,3,4000,'About ¥4,000 on food and drinks','Shinjuku','JY','Yakitori in smoky lanes, then a tiny bar. Many Golden Gai bars charge a ¥500–1,000+ cover.'),
+ P('palace','Imperial Palace East Gardens','tokyo','Chiyoda',35.6877,139.7556,'nature',4.3,1,1.5,0,'','Tokyo','JY','Free gardens on the old castle grounds, an easy stop near Tokyo Station. Usually closed Mondays and Fridays.'),
+ P('tokyotower','Tokyo Tower','tokyo','Minato',35.6586,139.7454,'view',4.3,1,1.5,1500,'About ¥1,500 (Main Deck)','Akabanebashi','E','Best at dusk, when the tower itself is lit. The skyline view is better from Shibuya Sky.'),
+ P('yanaka','Yanaka and Yanaka Ginza','tokyo','Yanaka',35.7274,139.7664,'culture',4.4,1.5,2,0,'','Nippori','JY','Old-Tokyo lanes, shrines and shopping-street snacks. Go before the day-trippers arrive.'),
+ P('kappabashi','Kappabashi Kitchen Street','tokyo','Asakusa',35.7147,139.7873,'fun',4.2,1,1.5,0,'','Tawaramachi','G','Knife shops and plastic-food shops, a short walk from Asakusa. A good wet-weather stop.'),
+ P('ghibli','Ghibli Museum','tokyo','Mitaka',35.6962,139.5704,'culture',4.7,2,2.5,1000,'¥1,000','Mitaka','JR','Tickets are sold in advance only and often sell out weeks ahead. Check availability before you plan around it.'),
+ P('odaiba','Odaiba waterfront','tokyo','Odaiba',35.6250,139.7753,'fun',4.2,2,3,0,'','Odaiba-kaihinkoen','U','Life-size Gundam statue, bay views and the Rainbow Bridge. Best after sunset.'),
+ P('hama','Hamarikyu Gardens','tokyo','Shiodome',35.6600,139.7633,'nature',4.4,1,1.5,300,'About ¥300','Shiodome','E','A former shogun’s garden with a teahouse on a tidal pond, with skyscrapers behind the pines.'),
+ P('ginza','Ginza shopping','tokyo','Ginza',35.6717,139.7650,'fun',4.2,2,3,0,'','Ginza','G','Department stores, Itoya stationery and big flagship stores. Good for tax-free shopping.'),
+ P('disneysea','Tokyo DisneySea','tokyo','Chiba',35.6267,139.8851,'fun',4.7,8,10,10500,'About ¥8,000–11,000, varies by date','Maihama','JR','Buy tickets in the official app before you fly. It takes a full day, so plan nothing else.'),
+ P('fushimi','Fushimi Inari Taisha','kyoto','Fushimi',34.9671,135.7727,'sight',4.8,2,3,0,'','Inari','JR','Walk the torii gates at dawn or after 17:00. The full loop up the mountain takes about 2 hours.'),
+ P('kiyomizu','Kiyomizu-dera','kyoto','Higashiyama',34.9949,135.7850,'sight',4.6,1.5,2,500,'About ¥500','Kiyomizu-Gojo','KH','A wooden stage over the hillside, with lanes of shops on the way up. Arrive at opening.'),
+ P('arashiyama','Arashiyama Bamboo Grove and Tenryu-ji','kyoto','Arashiyama',35.0170,135.6713,'nature',4.5,3,4,500,'About ¥500 (Tenryu-ji garden)','Saga-Arashiyama','JR','The bamboo path is free and busiest mid-morning. Go early, then the Tenryu-ji garden and the river.'),
+ P('kinkakuji','Kinkaku-ji (Golden Pavilion)','kyoto','Kita',35.0394,135.7292,'sight',4.6,1,1.5,500,'¥500','','','A short loop path to a gold-leaf pavilion across a pond. Late afternoon gives softer light.'),
+ P('gion','Gion and Hanamikoji','kyoto','Gion',35.0037,135.7756,'culture',4.5,1.5,2,0,'','Gion-Shijo','KH','Wooden machiya streets, best in the early evening. Stay on public lanes and keep your distance from geiko.'),
+ P('nishiki','Nishiki Market','kyoto','Central Kyoto',35.0050,135.7650,'food',4.4,1,1.5,2500,'About ¥2,500 on food','Shijo','K','Five blocks of food stalls: pickles, tofu doughnuts, skewers. Quieter before 11:00.'),
+ P('nijo','Nijo Castle','kyoto','Nakagyo',35.0142,135.7480,'culture',4.4,1.5,2,1300,'About ¥1,300','Nijojo-mae','T','The shogun’s palace, with floors that squeak like nightingales. Check closing days before you go.'),
+ P('philosopher','Philosopher’s Path and Ginkaku-ji','kyoto','Sakyo',35.0270,135.7982,'nature',4.5,2,2.5,500,'About ¥500 (Ginkaku-ji)','','','A canal-side walk between temples. Prettiest once the maples turn, usually later in November.'),
+ P('dotonbori','Dotonbori and Shinsaibashi','osaka','Namba',34.6687,135.5013,'food',4.6,2,3,3500,'About ¥3,500 on food','Namba','M','Takoyaki, okonomiyaki and neon. Come after dark for the full effect.'),
+ P('osakacastle','Osaka Castle','osaka','Chuo',34.6873,135.5262,'sight',4.5,2,2.5,1200,'About ¥1,200 (main tower)','Osakajokoen','JR','The park is free and good for a walk. The tower interior is a museum with a view from the top.'),
+ P('kuromon','Kuromon Market','osaka','Namba',34.6623,135.5063,'food',4.4,1,1.5,3000,'About ¥3,000 on food','Nippombashi','M','Grilled seafood, wagyu skewers and fruit. Go in the morning; some stalls close by mid-afternoon.'),
+ P('usj','Universal Studios Japan','osaka','Konohana',34.6654,135.4323,'fun',4.7,8,10,10500,'About ¥9,000–12,000, varies by date','Universal City','JR','Buy tickets ahead and check the official app for timed-entry areas. A full day.'),
+ P('umeda','Umeda Sky Building','osaka','Umeda',34.7054,135.4903,'view',4.4,1,1.5,2000,'About ¥2,000','Osaka','JR','An open-air rooftop ring between two towers. Best at sunset.'),
+ P('shinsekai','Shinsekai and Tsutenkaku','osaka','Shinsekai',34.6525,135.5063,'sight',4.2,1.5,2,900,'About ¥900 (Tsutenkaku tower)','Dobutsuen-mae','M','Retro Osaka with kushikatsu restaurants. Skip the tower if you are short on time.'),
+ P('kaiyukan','Osaka Aquarium Kaiyukan','osaka','Osakako',34.6545,135.4290,'fun',4.5,2.5,3,2700,'About ¥2,700','Osakako','C','Whale sharks in a huge central tank. Go on a weekday afternoon to avoid the queues.'),
+ P('naradeer','Nara Park and the deer','nara','Nara',34.6851,135.8430,'nature',4.6,2,2.5,200,'Free; deer crackers about ¥200','Nara','JR','The deer bow for crackers and will nibble your map. Keep paper and food out of reach.'),
+ P('todaiji','Todai-ji Great Buddha Hall','nara','Nara',34.6890,135.8398,'sight',4.7,1,1.5,800,'About ¥800','Nara','JR','One of the largest wooden buildings in the world, with a giant bronze Buddha inside.'),
+ P('kasuga','Kasuga Taisha','nara','Nara',34.6811,135.8486,'culture',4.5,1,1.5,500,'About ¥500 (inner shrine area)','Nara','JR','Lantern-lined paths through the forest. The outer approach is free.'),
+ P('hakoneloop','Hakone ropeway and Owakudani','hakone','Hakone',35.2437,139.0197,'nature',4.4,2.5,3.5,2500,'Fares vary by route; a Hakone Freepass covers the loop','Gora','JR','Volcanic steam vents and Fuji views on clear days. The ropeway can pause in strong wind.'),
+ P('ashi','Lake Ashi cruise and Hakone Shrine','hakone','Hakone',35.2018,139.0049,'sight',4.4,1.5,2,1200,'About ¥1,200, included in some passes','Moto-Hakone','JR','A sightseeing boat across the lake, then the shrine with its red torii in the water.'),
+ P('openair','Hakone Open-Air Museum','hakone','Chokoku-no-Mori',35.2444,139.0517,'culture',4.5,2,2.5,2500,'About ¥2,500','Chokoku-no-Mori','JR','Sculptures on a mountain slope, including a Picasso pavilion. Good in clear autumn weather.'),
+ P('onsen','Onsen day soak in Hakone-Yumoto','hakone','Hakone-Yumoto',35.2392,139.0776,'nature',4.5,2,3,1500,'About ¥1,500','Hakone-Yumoto','JR','Outdoor hot-spring baths. Tattoos may be restricted, so check the bath’s rules first.'),
+ P('toshogu','Nikko Toshogu Shrine','nikko','Nikko',36.7580,139.5993,'sight',4.7,2,3,1600,'About ¥1,600','Nikko','JR','A lavish World Heritage shrine complex. Nikko turns colour before Tokyo does, so late October is a good time.'),
+ P('kegon','Kegon Falls and Lake Chuzenji','nikko','Chuzenji',36.7393,139.5043,'nature',4.5,2,3,600,'About ¥600 (falls lift)','Nikko','JR','A 97 m waterfall above a mountain lake. Autumn traffic on the winding road can be slow.'),
+ P('daibutsu','Kotoku-in Great Buddha','kamakura','Hase',35.3167,139.5358,'sight',4.5,0.75,1,300,'¥300','Hase','JR','A 13th-century bronze Buddha in the open air. About an hour from Tokyo Station by JR.'),
+ P('hase','Hase-dera','kamakura','Hase',35.3126,139.5337,'culture',4.4,1,1.5,400,'About ¥400','Hase','JR','Hillside temple gardens with a view over the bay. A short walk from the Great Buddha.'),
+ P('tsurugaoka','Tsurugaoka Hachimangu and Komachi-dori','kamakura','Kamakura',35.3259,139.5566,'sight',4.4,1.5,2,0,'','Kamakura','JR','A grand shrine approach, then Komachi-dori for snacks and souvenirs.')
+];
+function H(id,n,c,a,lat,lon,band,tag){return {id:id,n:n,c:c,a:a,lat:lat,lon:lon,b:band,t:tag}}
+function HA(id,n,c,a,band,tag){var ar=AREAS[c].filter(function(x){return x[0]===a})[0]||AREAS[c][0],h=0;for(var i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))%1000;return H(id,n,c,a,+(ar[1]+((h%20)-10)*0.0003).toFixed(4),+(ar[2]+((Math.floor(h/20)%20)-10)*0.0003).toFixed(4),band,tag)}
+var HOTELS=[
+ H('hotelmifuji','Hotel Mifuji','fuji','Kawaguchiko Station',35.5120,138.7620,3,'Lake and Fuji views from many rooms'),
+ H('fujiview','Fuji View Hotel','fuji','Kawaguchiko Station',35.5040,138.7520,3,'Big lake-side hotel with onsen'),
+ H('hoshinoyafuji','Hoshinoya Fuji','fuji','Lake Kawaguchi north shore',35.5340,138.7040,4,'Glamping-style resort on the lake'),
+ H('kozantei','Kozantei Ubuya','fuji','Kawaguchiko Station',35.5090,138.7580,4,'Ryokan with views of the lake'),
+ H('granviahiro','Hotel Granvia Hiroshima','hiroshima','Hiroshima Station',34.3978,132.4757,3,'Connected to Hiroshima Station'),
+ H('sheratonhiro','Sheraton Grand Hiroshima Hotel','hiroshima','Hiroshima Station',34.3982,132.4745,3,'Next to the station, high floors'),
+ H('iwaso','Iwaso','hiroshima','Miyajima',34.2938,132.3188,4,'Traditional ryokan on Miyajima'),
+ H('yokobayhotel','Yokohama Bay Hotel Tokyu','yokohama','Minato Mirai',35.4570,139.6350,3,'Harbour views'),
+ H('interyoko','InterContinental Yokohama Grand','yokohama','Minato Mirai',35.4590,139.6350,4,'Sail-shaped tower on the waterfront'),
+ H('amanek','Hotel Amanek Asakusa Ekimae','tokyo','Asakusa',35.7099,139.7965,2,'In front of Asakusa Station'),
+ H('gate','The Gate Hotel Asakusa Kaminarimon','tokyo','Asakusa',35.7108,139.7963,3,'Beside Kaminarimon gate, river views'),
+ H('gracery','Hotel Gracery Shinjuku','tokyo','Shinjuku',35.6957,139.7008,2,'In Kabukicho, near Golden Gai'),
+ H('parkhyatt','Park Hyatt Tokyo','tokyo','Shinjuku',35.6856,139.6914,4,'Top-floor views over West Shinjuku'),
+ H('shibuyastream','Shibuya Stream Excel Hotel Tokyu','tokyo','Shibuya',35.6579,139.7040,3,'Next to Shibuya Station'),
+ H('ryumeikan','Hotel Ryumeikan Tokyo','tokyo','Tokyo Station',35.6826,139.7692,2,'Short walk to Tokyo Station'),
+ H('imperial','The Imperial Hotel Tokyo','tokyo','Ginza',35.6728,139.7581,4,'Classic hotel by the Imperial Palace'),
+ H('mgginza','Mitsui Garden Hotel Ginza Premier','tokyo','Ginza',35.6699,139.7595,3,'Walk to Ginza and Tsukiji'),
+ H('granviakyoto','Hotel Granvia Kyoto','kyoto','Kyoto Station',34.9855,135.7585,3,'Inside Kyoto Station'),
+ H('thousand','The Thousand Kyoto','kyoto','Kyoto Station',34.9892,135.7581,3,'Design hotel by the station'),
+ H('kanra','Hotel Kanra Kyoto','kyoto','Kawaramachi',34.9968,135.7614,3,'Quiet central lanes, near Gion'),
+ H('crossosaka','Cross Hotel Osaka','osaka','Namba',34.6738,135.5013,3,'Between Dotonbori and Shinsaibashi'),
+ H('granviaosaka','Hotel Granvia Osaka','osaka','Umeda',34.7035,135.4947,3,'Inside Osaka Station'),
+ H('monterey','Hotel Monterey Grasmere Osaka','osaka','Namba',34.6643,135.5006,2,'Beside Nankai Namba Station'),
+ H('nikkonara','Hotel Nikko Nara','nara','Nara Station',34.6813,135.8190,2,'At JR Nara Station'),
+ H('fujiya','Fujiya Hotel','hakone','Hakone-Yumoto',35.2400,139.0530,4,'Historic mountain hotel with hot springs'),
+ H('goraKadan','Gora Kadan','hakone','Gora',35.2497,139.0521,4,'Luxury ryokan with private baths'),
+ H('kanaya','Nikko Kanaya Hotel','nikko','Nikko Station',36.7511,139.5977,3,'Classic hotel near Toshogu'),
+ HA('xasakusatobuhotel0','Asakusa Tobu Hotel','tokyo','Asakusa',2,'Walk to Senso-ji and the river'),
+ HA('xrichmondhotelpremi1','Richmond Hotel Premier Asakusa International','tokyo','Asakusa',2,'Modern rooms near Tsukuba Express'),
+ HA('xhotelmystaysasakus2','Hotel Mystays Asakusa','tokyo','Asakusa',2,'Simple, good value'),
+ HA('xhotelgraceryasakus3','Hotel Gracery Asakusa','tokyo','Asakusa',2,'Close to Kappabashi'),
+ HA('xtoyokoinnasakusaku4','Toyoko Inn Asakusa Kuramae Kaminarimon','tokyo','Asakusa',1,'Budget, breakfast included'),
+ HA('xasakusaviewhotel5','Asakusa View Hotel','tokyo','Asakusa',3,'Large hotel with Skytree views'),
+ HA('xhotelmystaysasakus6','Hotel Mystays Asakusabashi','tokyo','Asakusabashi',2,'Quiet, good rail links'),
+ HA('xhotelmystaysuenoin7','Hotel Mystays Ueno Inaricho','tokyo','Ueno',2,'Near Ueno Park and Asakusa line'),
+ HA('xuenohotel8','Ueno Hotel','tokyo','Ueno',1,'Simple budget base'),
+ HA('xhotelmystaysakihab9','Hotel Mystays Akihabara','tokyo','Akihabara',2,'Electric Town on the doorstep'),
+ HA('xmandarinorientalto10','Mandarin Oriental Tokyo','tokyo','Nihonbashi',4,'Top-end hotel above Mitsukoshi'),
+ HA('xmitsuigardenhoteln11','Mitsui Garden Hotel Nihonbashi Premier','tokyo','Nihonbashi',3,'Central, quiet streets'),
+ HA('xtokyostationhotel12','Tokyo Station Hotel','tokyo','Tokyo Station',4,'Historic hotel inside the station'),
+ HA('xshangrilatokyo13','Shangri-La Tokyo','tokyo','Tokyo Station',4,'Upper floors with city views'),
+ HA('xpalacehoteltokyo14','Palace Hotel Tokyo','tokyo','Tokyo Station',4,'Facing the Imperial Palace'),
+ HA('xhotelmetropolitant15','Hotel Metropolitan Tokyo Marunouchi','tokyo','Tokyo Station',3,'Next to the station'),
+ HA('xhotelmusseginzamei16','Hotel Musse Ginza Meitetsu','tokyo','Ginza',2,'Compact, central'),
+ HA('xmillenniummitsuiga17','Millennium Mitsui Garden Hotel Tokyo','tokyo','Ginza',3,'Between Ginza and Tsukiji'),
+ HA('xhotelmontereyginza18','Hotel Monterey Ginza','tokyo','Ginza',2,'Classic mid-range'),
+ HA('xmujihotelginza19','MUJI Hotel Ginza','tokyo','Ginza',3,'Minimal design, shop below'),
+ HA('xthecapitolhoteltok20','The Capitol Hotel Tokyu','tokyo','Akasaka',4,'Calm hotel near Hie Shrine'),
+ HA('xakasakaexcelhotelt21','Akasaka Excel Hotel Tokyu','tokyo','Akasaka',3,'Good subway access'),
+ HA('xhotelnewotanitokyo22','Hotel New Otani Tokyo','tokyo','Akasaka',3,'Famous garden grounds'),
+ HA('xgrandhyatttokyo23','Grand Hyatt Tokyo','tokyo','Roppongi',4,'Roppongi Hills base'),
+ HA('xtheritzcarltontoky24','The Ritz-Carlton Tokyo','tokyo','Roppongi',4,'Midtown tower with skyline views'),
+ HA('xkeioplazahoteltoky25','Keio Plaza Hotel Tokyo','tokyo','Shinjuku',3,'West Shinjuku towers'),
+ HA('xhiltontokyo26','Hilton Tokyo','tokyo','Shinjuku',3,'Near Shinjuku Central Park'),
+ HA('xhotelcenturysouthe27','Hotel Century Southern Tower','tokyo','Shinjuku',2,'Directly above Shinjuku Station south exit'),
+ HA('xshinjukugranbellho28','Shinjuku Granbell Hotel','tokyo','Shinjuku',2,'In Kabukicho'),
+ HA('xhotelsunrouteplaza29','Hotel Sunroute Plaza Shinjuku','tokyo','Shinjuku',2,'Beside Yoyogi Station'),
+ HA('xhyattregencytokyo30','Hyatt Regency Tokyo','tokyo','Shinjuku',4,'West Shinjuku'),
+ HA('xshinjukuwashington31','Shinjuku Washington Hotel','tokyo','Shinjuku',2,'Reliable mid-range'),
+ HA('xtoyokoinnshinjukuk32','Toyoko Inn Shinjuku Kabukicho','tokyo','Shinjuku',1,'Budget, basic'),
+ HA('xceruleantowertokyu33','Cerulean Tower Tokyu Hotel','tokyo','Shibuya',4,'High-floor views above Shibuya'),
+ HA('xshibuyagranbellhot34','Shibuya Granbell Hotel','tokyo','Shibuya',2,'Quiet side of Shibuya'),
+ HA('xhotelmystaysshibuy35','Hotel Mystays Shibuya','tokyo','Shibuya',2,'Walking distance to the crossing'),
+ HA('xtokyustayshibuyash36','Tokyu Stay Shibuya Shin-minamiguchi','tokyo','Shibuya',2,'Rooms with kitchenettes'),
+ HA('xthewestintokyo37','The Westin Tokyo','tokyo','Ebisu',4,'Garden Place, calm and polished'),
+ HA('xhotelmetropolitant38','Hotel Metropolitan Tokyo Ikebukuro','tokyo','Ikebukuro',3,'Right at the station'),
+ HA('xsunshinecityprince39','Sunshine City Prince Hotel','tokyo','Ikebukuro',2,'Next to the Sunshine City mall'),
+ HA('xshinagawaprincehot40','Shinagawa Prince Hotel','tokyo','Shinagawa',2,'Big hotel at Shinagawa Station'),
+ HA('xtheprincesakuratow41','The Prince Sakura Tower Tokyo','tokyo','Shinagawa',3,'Garden setting, short walk to station'),
+ HA('xhiltontokyoodaiba42','Hilton Tokyo Odaiba','tokyo','Odaiba',3,'Bay views, mall next door'),
+ HA('xhanedaexcelhotelto43','Haneda Excel Hotel Tokyu','tokyo','Haneda Airport',3,'Inside the Haneda terminal'),
+ HA('xvillafontainegrand44','Villa Fontaine Grand Haneda Airport','tokyo','Haneda Airport',3,'Airport hotel with a bath'),
+ HA('xhotelnikkonarita45','Hotel Nikko Narita','tokyo','Narita Airport',2,'Free shuttle to Narita airport'),
+ HA('xnaritatobuhotelair46','Narita Tobu Hotel Airport','tokyo','Narita Airport',2,'Airport shuttle, easy for early flights'),
+ HA('xkyototowerhotel47','Kyoto Tower Hotel','kyoto','Kyoto Station',2,'Above the station, handy for trains'),
+ HA('xrandorhotelkyoto48','Randor Hotel Kyoto','kyoto','Karasuma',2,'Modern, central shopping area'),
+ HA('xtheroyalparkhotelk49','The Royal Park Hotel Kyoto Sanjo','kyoto','Kawaramachi',3,'Near Kamo River'),
+ HA('xmitsuigardenhotelk50','Mitsui Garden Hotel Kyoto Sanjo','kyoto','Kawaramachi',3,'Walk to Gion and Nishiki'),
+ HA('xhotelgracerykyotos51','Hotel Gracery Kyoto Sanjo','kyoto','Kawaramachi',2,'Simple, central'),
+ HA('xtheritzcarltonkyot52','The Ritz-Carlton Kyoto','kyoto','Gion',4,'Riverside luxury by the Kamo'),
+ HA('xfourseasonshotelky53','Four Seasons Hotel Kyoto','kyoto','Gion',4,'Garden hotel near Shichijo'),
+ HA('xhyattregencykyoto54','Hyatt Regency Kyoto','kyoto','Gion',3,'Close to Sanjusangendo'),
+ HA('xthewestinmiyakokyo55','The Westin Miyako Kyoto','kyoto','Higashiyama',4,'Hillside with garden paths'),
+ HA('xkyotohotelokura56','Kyoto Hotel Okura','kyoto','Kawaramachi',4,'On Kamogawa river'),
+ HA('xsuiranluxurycollec57','Suiran Luxury Collection Hotel Kyoto','kyoto','Arashiyama',4,'Riverside in Arashiyama'),
+ HA('xhoshinoyakyoto58','Hoshinoya Kyoto','kyoto','Arashiyama',4,'Riverside ryokan reached by boat'),
+ HA('xhotelnewhankyuosak59','Hotel New Hankyu Osaka','osaka','Umeda',2,'Beside Osaka-Umeda Station'),
+ HA('xhotelhankyurespire60','Hotel Hankyu Respire Osaka','osaka','Umeda',3,'Above the station, rooftop pool'),
+ HA('xhotelnikkoosaka61','Hotel Nikko Osaka','osaka','Umeda',3,'Between Namba and Shinsaibashi'),
+ HA('xconradosaka62','Conrad Osaka','osaka','Umeda',4,'Skyscraper luxury in Nakanoshima'),
+ HA('xswissotelnankaiosa63','Swissotel Nankai Osaka','osaka','Namba',3,'Above Nankai Namba Station'),
+ HA('xdormyinnpremiumnam64','Dormy Inn Premium Namba','osaka','Namba',2,'Hot spring bath, free ramen'),
+ HA('xosakamarriottmiyak65','Osaka Marriott Miyako Hotel','osaka','Tennoji',4,'Inside Abeno Harukas'),
+ HA('xnarahotel66','Nara Hotel','nara','Nara Station',3,'Historic hotel by Nara Park'),
+ HA('xhotelfujitanara67','Hotel Fujita Nara','nara','Nara Station',2,'Short walk to Kofukuji'),
+ HA('xhotelokada68','Hotel Okada','hakone','Hakone-Yumoto',3,'Onsen hotel near Yumoto'),
+ HA('xhakoneginyu69','Hakone Ginyu','hakone','Gora',4,'Private-bath ryokan style'),
+ HA('xhakonekowakienteny70','Hakone Kowakien Ten-yu','hakone','Gora',4,'Hot spring ryokan')
+];
+
+/* more hotels: approximate positions inside the named area */
+var T='Position is approximate. ';
+HOTELS=HOTELS.concat([
+ HA('xtoyokoinntokyoasak5','Toyoko Inn Tokyo Asakusa Kuramae','tokyo','Asakusabashi',1,T+'Budget chain, breakfast included'),
+ HA('xakihabarawashingto7','Akihabara Washington Hotel','tokyo','Akihabara',2,T+'Steps from the electronics district'),
+ HA('xdaiwaroynethotelak8','Daiwa Roynet Hotel Akihabara','tokyo','Akihabara',2,T+'Compact modern rooms'),
+ HA('xuenofirstcityhotel9','Ueno First City Hotel','tokyo','Ueno',2,T+'Short walk to Ueno Park'),
+ HA('xtoyokoinnuenookach10','Toyoko Inn Ueno Okachimachi','tokyo','Ueno',1,T+'Budget chain near the station'),
+ HA('xhotelmystaysuenoir11','Hotel Mystays Ueno Iriyaguchi','tokyo','Ueno',2,T+'Near Ueno Station'),
+ HA('xthetokyostationhot12','The Tokyo Station Hotel','tokyo','Tokyo Station',4,T+'Historic red-brick hotel inside the station'),
+ HA('xfourseasonshotelto14','Four Seasons Hotel Tokyo at Marunouchi','tokyo','Tokyo Station',4,T+'Upscale, next to the station'),
+ HA('xthepeninsulatokyo16','The Peninsula Tokyo','tokyo','Tokyo Station',4,T+'Luxury near the palace and Ginza'),
+ HA('xmitsuigardenhotelg19','Mitsui Garden Hotel Ginza Gochome','tokyo','Ginza',3,T+'Quiet end of Ginza'),
+ HA('xmujihotelginza22','Muji Hotel Ginza','tokyo','Ginza',3,T+'Minimal design, shop and cafe below'),
+ HA('xtokyustayginza23','Tokyu Stay Ginza','tokyo','Ginza',2,T+'Rooms with a small kitchenette and laundry'),
+ HA('xanaintercontinenta25','ANA InterContinental Tokyo','tokyo','Akasaka',4,T+'Near Roppongi and Akasaka'),
+ HA('xandaztokyotoranomo28','Andaz Tokyo Toranomon Hills','tokyo','Akasaka',4,T+'Sky-high, modern luxury'),
+ HA('xmitsuigardenhotelr31','Mitsui Garden Hotel Roppongi Tokyo Premier','tokyo','Roppongi',3,T+'Quiet, near nightlife'),
+ HA('xhotelgajoentokyo33','Hotel Gajoen Tokyo','tokyo','Ebisu',3,T+'Art-filled hotel near Meguro River'),
+ HA('xshibuyatobuhotel35','Shibuya Tobu Hotel','tokyo','Shibuya',2,T+'Quick walk to the crossing'),
+ HA('xshibuyaexcelhotelt36','Shibuya Excel Hotel Tokyu','tokyo','Shibuya',3,T+'Directly connected to the station'),
+ HA('xmillennialsshibuya37','Millennials Shibuya','tokyo','Shibuya',1,T+'Pod-style rooms, social lounge'),
+ HA('xtrunkhotel38','Trunk Hotel','tokyo','Shibuya',4,T+'Trendy boutique near Harajuku'),
+ HA('xapahotelshinjukuka44','APA Hotel Shinjuku Kabukicho Tower','tokyo','Shinjuku',2,T+'Compact rooms, lively area'),
+ HA('xtoyokoinnikebukuro48','Toyoko Inn Ikebukuro Kita-guchi','tokyo','Ikebukuro',1,T+'Budget chain, north exit'),
+ HA('xhotelvillafontaine50','Hotel Villa Fontaine Grand Tokyo Shiodome','tokyo','Shinagawa',3,T+'Near Hamarikyu Gardens'),
+ HA('xgrandnikkotokyodai52','Grand Nikko Tokyo Daiba','tokyo','Odaiba',3,T+'Waterfront, Odaiba'),
+ HA('xhotelvillafontaine54','Hotel Villa Fontaine Grand Haneda Airport','tokyo','Haneda Airport',3,T+'Next to Terminal 3'),
+ HA('xroyalparkhoteltheh55','Royal Park Hotel The Haneda','tokyo','Haneda Airport',3,T+'Connected to Terminal 3'),
+ HA('xnaritaexcelhotelto58','Narita Excel Hotel Tokyu','tokyo','Narita Airport',2,T+'Short drive to the terminals'),
+ HA('xhotelmystayspremie59','Hotel Mystays Premier Narita','tokyo','Narita Airport',2,T+'Shuttle and a calm lobby'),
+ HA('xnaritagatewayhotel60','Narita Gateway Hotel','tokyo','Narita Airport',2,T+'Practical stop before an early flight'),
+ HA('xkyototokyuhotel62','Kyoto Tokyu Hotel','kyoto','Kyoto Station',3,T+'Shuttle to the station'),
+ HA('xhotelkeihankyotogr63','Hotel Keihan Kyoto Grande','kyoto','Kyoto Station',2,T+'Near Karasuma exit'),
+ HA('xhotelvischiokyoto64','Hotel Vischio Kyoto','kyoto','Kyoto Station',2,T+'Modern, close to Kyoto Station'),
+ HA('xcandeohotelskyotok65','Candeo Hotels Kyoto Karasuma Rokkaku','kyoto','Karasuma',2,T+'Central, spa bath'),
+ HA('xsolarianishitetsuh66','Solaria Nishitetsu Hotel Kyoto Premier','kyoto','Karasuma',2,T+'Near Shijo-Karasuma'),
+ HA('xhotelokurakyoto67','Hotel Okura Kyoto','kyoto','Kawaramachi',4,T+'Classic hotel by the Kamo River'),
+ HA('xhotelmontereykyoto71','Hotel Monterey Kyoto','kyoto','Kawaramachi',3,T+'Short walk to Shijo'),
+ HA('xgionhatanaka74','Gion Hatanaka','kyoto','Gion',3,T+'Traditional ryokan in Gion'),
+ HA('xtheritzcarltonosak78','The Ritz-Carlton Osaka','osaka','Umeda',4,T+'Classic luxury near Umeda'),
+ HA('xrihgaroyalhotelosa81','Rihga Royal Hotel Osaka','osaka','Umeda',3,T+'Nakanoshima riverfront'),
+ HA('xhotelmontereyosaka82','Hotel Monterey Osaka','osaka','Umeda',2,T+'Quiet European feel'),
+ HA('xnambaorientalhotel85','Namba Oriental Hotel','osaka','Namba',2,T+'On Dotonbori, central'),
+ HA('xtoyokoinnshinosaka88','Toyoko Inn Shin-Osaka Chuo-guchi','osaka','Shin-Osaka',1,T+'Budget chain next to Shinkansen'),
+ HA('xkasugahotel91','Kasuga Hotel','nara','Nara Station',2,T+'Near Nara Park'),
+ HA('xhakoneyutowa93','Hakone Yutowa','hakone','Hakone-Yumoto',3,T+'Riverside onsen inn'),
+ HA('xyumotofujiyahotel94','Yumoto Fujiya Hotel','hakone','Hakone-Yumoto',2,T+'Onsen, easy from the station'),
+ HA('xhotelmetropolitank97','Hotel Metropolitan Kamakura','kamakura','Kamakura Station',3,T+'Next to Kamakura Station'),
+ HA('xhotelnewkamakura98','Hotel New Kamakura','kamakura','Kamakura Station',1,T+'Small, cheap, near Komachi-dori'),
+ HA('xkamakuraprincehote99','Kamakura Prince Hotel','kamakura','Kamakura Station',3,T+'Beachside, views of Mt Fuji on clear days')
+]);
+
+return {CITIES,CORDER,CEXTRA,LN,APTIP,ROUTES,BANDS,AREAS,SPOTS,HOTELS};
+})();
+
+JP.HOTELS.forEach(function(h){h.p=JP.BANDS[h.b||2].mid});
+JP.CITIES_LIST=JP.CORDER;
+
+/* Airports: code, city, IANA time zone, country. Enough to cover most trips; "Other" handles the rest. */
+const AIRPORTS=[
+['SYD','Sydney','Australia/Sydney','AU'],['MEL','Melbourne','Australia/Melbourne','AU'],['BNE','Brisbane','Australia/Brisbane','AU'],['PER','Perth','Australia/Perth','AU'],['ADL','Adelaide','Australia/Adelaide','AU'],['OOL','Gold Coast','Australia/Brisbane','AU'],['CNS','Cairns','Australia/Brisbane','AU'],['HBA','Hobart','Australia/Hobart','AU'],['DRW','Darwin','Australia/Darwin','AU'],['CBR','Canberra','Australia/Sydney','AU'],
+['AKL','Auckland','Pacific/Auckland','NZ'],['CHC','Christchurch','Pacific/Auckland','NZ'],['WLG','Wellington','Pacific/Auckland','NZ'],['ZQN','Queenstown','Pacific/Auckland','NZ'],['NAN','Nadi (Fiji)','Pacific/Fiji','FJ'],['PPT','Papeete (Tahiti)','Pacific/Tahiti','PF'],
+['HND','Tokyo Haneda','Asia/Tokyo','JP'],['NRT','Tokyo Narita','Asia/Tokyo','JP'],['KIX','Osaka Kansai','Asia/Tokyo','JP'],['ITM','Osaka Itami','Asia/Tokyo','JP'],['NGO','Nagoya','Asia/Tokyo','JP'],['FUK','Fukuoka','Asia/Tokyo','JP'],['CTS','Sapporo','Asia/Tokyo','JP'],['OKA','Okinawa','Asia/Tokyo','JP'],
+['ICN','Seoul Incheon','Asia/Seoul','KR'],['GMP','Seoul Gimpo','Asia/Seoul','KR'],['PUS','Busan','Asia/Seoul','KR'],['TPE','Taipei','Asia/Taipei','TW'],['HKG','Hong Kong','Asia/Hong_Kong','HK'],['PVG','Shanghai Pudong','Asia/Shanghai','CN'],['PEK','Beijing','Asia/Shanghai','CN'],['CAN','Guangzhou','Asia/Shanghai','CN'],['CTU','Chengdu','Asia/Shanghai','CN'],
+['SIN','Singapore','Asia/Singapore','SG'],['KUL','Kuala Lumpur','Asia/Kuala_Lumpur','MY'],['BKK','Bangkok Suvarnabhumi','Asia/Bangkok','TH'],['HKT','Phuket','Asia/Bangkok','TH'],['CNX','Chiang Mai','Asia/Bangkok','TH'],['SGN','Ho Chi Minh City','Asia/Ho_Chi_Minh','VN'],['HAN','Hanoi','Asia/Ho_Chi_Minh','VN'],['DAD','Da Nang','Asia/Ho_Chi_Minh','VN'],['MNL','Manila','Asia/Manila','PH'],['CGK','Jakarta','Asia/Jakarta','ID'],['DPS','Bali (Denpasar)','Asia/Makassar','ID'],
+['DEL','Delhi','Asia/Kolkata','IN'],['BOM','Mumbai','Asia/Kolkata','IN'],['BLR','Bengaluru','Asia/Kolkata','IN'],['MAA','Chennai','Asia/Kolkata','IN'],['KTM','Kathmandu','Asia/Kathmandu','NP'],['CMB','Colombo','Asia/Colombo','LK'],['MLE','Malé (Maldives)','Indian/Maldives','MV'],['DAC','Dhaka','Asia/Dhaka','BD'],
+['DXB','Dubai','Asia/Dubai','AE'],['AUH','Abu Dhabi','Asia/Dubai','AE'],['DOH','Doha','Asia/Qatar','QA'],['IST','Istanbul','Europe/Istanbul','TR'],['TLV','Tel Aviv','Asia/Jerusalem','IL'],['CAI','Cairo','Africa/Cairo','EG'],['JNB','Johannesburg','Africa/Johannesburg','ZA'],['CPT','Cape Town','Africa/Johannesburg','ZA'],['NBO','Nairobi','Africa/Nairobi','KE'],['CMN','Casablanca','Africa/Casablanca','MA'],['ADD','Addis Ababa','Africa/Addis_Ababa','ET'],
+['LHR','London Heathrow','Europe/London','GB'],['LGW','London Gatwick','Europe/London','GB'],['MAN','Manchester','Europe/London','GB'],['EDI','Edinburgh','Europe/London','GB'],['DUB','Dublin','Europe/Dublin','IE'],['CDG','Paris Charles de Gaulle','Europe/Paris','FR'],['AMS','Amsterdam','Europe/Amsterdam','NL'],['BRU','Brussels','Europe/Brussels','BE'],['FRA','Frankfurt','Europe/Berlin','DE'],['MUC','Munich','Europe/Berlin','DE'],['BER','Berlin','Europe/Berlin','DE'],['ZRH','Zurich','Europe/Zurich','CH'],['GVA','Geneva','Europe/Zurich','CH'],['VIE','Vienna','Europe/Vienna','AT'],['PRG','Prague','Europe/Prague','CZ'],['BUD','Budapest','Europe/Budapest','HU'],['WAW','Warsaw','Europe/Warsaw','PL'],['CPH','Copenhagen','Europe/Copenhagen','DK'],['ARN','Stockholm','Europe/Stockholm','SE'],['OSL','Oslo','Europe/Oslo','NO'],['HEL','Helsinki','Europe/Helsinki','FI'],['KEF','Reykjavik','Atlantic/Reykjavik','IS'],
+['MAD','Madrid','Europe/Madrid','ES'],['BCN','Barcelona','Europe/Madrid','ES'],['LIS','Lisbon','Europe/Lisbon','PT'],['OPO','Porto','Europe/Lisbon','PT'],['FCO','Rome','Europe/Rome','IT'],['MXP','Milan','Europe/Rome','IT'],['VCE','Venice','Europe/Rome','IT'],['ATH','Athens','Europe/Athens','GR'],
+['JFK','New York JFK','America/New_York','US'],['EWR','New York Newark','America/New_York','US'],['BOS','Boston','America/New_York','US'],['IAD','Washington Dulles','America/New_York','US'],['ATL','Atlanta','America/New_York','US'],['MIA','Miami','America/New_York','US'],['ORD','Chicago','America/Chicago','US'],['DFW','Dallas','America/Chicago','US'],['DEN','Denver','America/Denver','US'],['LAX','Los Angeles','America/Los_Angeles','US'],['SFO','San Francisco','America/Los_Angeles','US'],['SEA','Seattle','America/Los_Angeles','US'],['LAS','Las Vegas','America/Los_Angeles','US'],['HNL','Honolulu','Pacific/Honolulu','US'],
+['YYZ','Toronto','America/Toronto','CA'],['YVR','Vancouver','America/Vancouver','CA'],['YUL','Montreal','America/Toronto','CA'],['MEX','Mexico City','America/Mexico_City','MX'],['CUN','Cancun','America/Cancun','MX'],['GRU','Sao Paulo','America/Sao_Paulo','BR'],['GIG','Rio de Janeiro','America/Sao_Paulo','BR'],['EZE','Buenos Aires','America/Argentina/Buenos_Aires','AR'],['SCL','Santiago','America/Santiago','CL'],['LIM','Lima','America/Lima','PE'],['BOG','Bogota','America/Bogota','CO']
+].sort(function(a,b){return a[1]<b[1]?-1:1}).map(function(a){return {code:a[0],city:a[1],tz:a[2],cc:a[3]}});
+const AP={};AIRPORTS.forEach(function(a){AP[a.code]=a});
+
+const CUR_BY_CC={AU:'AUD',NZ:'NZD',US:'USD',CA:'CAD',GB:'GBP',IE:'EUR',DE:'EUR',FR:'EUR',NL:'EUR',BE:'EUR',AT:'EUR',ES:'EUR',PT:'EUR',IT:'EUR',GR:'EUR',FI:'EUR',JP:'JPY',KR:'KRW',CN:'CNY',HK:'HKD',TW:'TWD',SG:'SGD',MY:'MYR',TH:'THB',VN:'VND',PH:'PHP',ID:'IDR',IN:'INR',NP:'NPR',LK:'LKR',MV:'USD',BD:'BDT',AE:'AED',QA:'QAR',TR:'TRY',IL:'ILS',EG:'EGP',ZA:'ZAR',KE:'KES',MA:'MAD',ET:'ETB',CH:'CHF',CZ:'CZK',HU:'HUF',PL:'PLN',DK:'DKK',SE:'SEK',NO:'NOK',IS:'ISK',MX:'MXN',BR:'BRL',AR:'ARS',CL:'CLP',PE:'PEN',CO:'COP',FJ:'FJD',PF:'XPF'};
+const CURRENCIES=['AUD','NZD','USD','CAD','GBP','EUR','CHF','JPY','KRW','CNY','HKD','TWD','SGD','MYR','THB','VND','PHP','IDR','INR','NPR','LKR','BDT','AED','QAR','TRY','ILS','EGP','ZAR','KES','MAD','CZK','HUF','PLN','DKK','SEK','NOK','ISK','MXN','BRL','ARS','CLP','PEN','COP','FJD','XPF'];
+
+/* Typed destination -> a helpful starting point. Only suggestions; the traveller can change everything. */
+const HINTS={japan:{cur:'JPY',ap:'HND',pack:'japan'},tokyo:{cur:'JPY',ap:'HND',pack:'japan'},kyoto:{cur:'JPY',ap:'KIX',pack:'japan'},osaka:{cur:'JPY',ap:'KIX',pack:'japan'},italy:{cur:'EUR',ap:'FCO'},rome:{cur:'EUR',ap:'FCO'},france:{cur:'EUR',ap:'CDG'},paris:{cur:'EUR',ap:'CDG'},spain:{cur:'EUR',ap:'MAD'},portugal:{cur:'EUR',ap:'LIS'},greece:{cur:'EUR',ap:'ATH'},germany:{cur:'EUR',ap:'FRA'},netherlands:{cur:'EUR',ap:'AMS'},'united kingdom':{cur:'GBP',ap:'LHR'},london:{cur:'GBP',ap:'LHR'},ireland:{cur:'EUR',ap:'DUB'},iceland:{cur:'ISK',ap:'KEF'},switzerland:{cur:'CHF',ap:'ZRH'},turkey:{cur:'TRY',ap:'IST'},thailand:{cur:'THB',ap:'BKK'},vietnam:{cur:'VND',ap:'SGN'},bali:{cur:'IDR',ap:'DPS'},indonesia:{cur:'IDR',ap:'DPS'},singapore:{cur:'SGD',ap:'SIN'},'south korea':{cur:'KRW',ap:'ICN'},seoul:{cur:'KRW',ap:'ICN'},taiwan:{cur:'TWD',ap:'TPE'},'hong kong':{cur:'HKD',ap:'HKG'},china:{cur:'CNY',ap:'PVG'},india:{cur:'INR',ap:'DEL'},nepal:{cur:'NPR',ap:'KTM'},'sri lanka':{cur:'LKR',ap:'CMB'},maldives:{cur:'USD',ap:'MLE'},dubai:{cur:'AED',ap:'DXB'},egypt:{cur:'EGP',ap:'CAI'},morocco:{cur:'MAD',ap:'CMN'},'south africa':{cur:'ZAR',ap:'JNB'},'new zealand':{cur:'NZD',ap:'AKL'},fiji:{cur:'FJD',ap:'NAN'},'new york':{cur:'USD',ap:'JFK'},usa:{cur:'USD',ap:'JFK'},'united states':{cur:'USD',ap:'JFK'},hawaii:{cur:'USD',ap:'HNL'},canada:{cur:'CAD',ap:'YYZ'},mexico:{cur:'MXN',ap:'MEX'},peru:{cur:'PEN',ap:'LIM'},argentina:{cur:'ARS',ap:'EZE'},brazil:{cur:'BRL',ap:'GRU'},malaysia:{cur:'MYR',ap:'KUL'},philippines:{cur:'PHP',ap:'MNL'}};
+const SUGGEST=['Japan','Italy','Thailand','Portugal','New Zealand','Vietnam','Iceland','Greece','South Korea','Mexico','Bali','Morocco'];
+
+const GOV={AU:['Smartraveller','https://www.smartraveller.gov.au/destinations'],US:['US State Department travel advisories','https://travel.state.gov/content/travel/en/traveladvisories/traveladvisories.html'],GB:['UK foreign travel advice','https://www.gov.uk/foreign-travel-advice'],CA:['Canada travel advice','https://travel.gc.ca/travelling/advisories'],NZ:['SafeTravel (NZ)','https://www.safetravel.govt.nz/'],IE:['Irish travel advice','https://www.ireland.ie/en/dfa/overseas-travel/advice/'],SG:['MFA Singapore travel','https://www.mfa.gov.sg/Overseas-Mission/Travel-Advisories'],IN:['India MEA advisories','https://www.mea.gov.in/']};
+const CHECKS=[
+['docs','Passport and entry','Passport valid for the whole trip (some countries need 6 months)'],
+['docs2','Passport and entry','Visa, eTA or online entry form sorted'],
+['docs3','Passport and entry','Travel insurance bought and policy saved offline'],
+['docs4','Passport and entry','Copies of passport and bookings saved to your phone and email'],
+['book1','Bookings','Flights confirmed and times checked a day before'],
+['book2','Bookings','Every night has a stay'],
+['book3','Bookings','Tickets booked for timed attractions'],
+['money1','Money','Bank told about travel, card works abroad'],
+['money2','Money','Some local cash for the first day'],
+['tech1','Phone and power','eSIM or roaming sorted'],
+['tech2','Phone and power','Plug adapter packed'],
+['tech3','Phone and power','Maps and tickets downloaded for offline use'],
+['home1','Before you leave','Medicines packed in original packaging'],
+['home2','Before you leave','Mail, pets, plants and bins arranged'],
+['home3','Before you leave','Airport transfer planned']
+];
+
+/* Airport positions (rounded) so a flight time can be estimated for any pair. */
+const COORD={SYD:[-33.95,151.18],MEL:[-37.67,144.84],BNE:[-27.38,153.12],PER:[-31.94,115.97],ADL:[-34.95,138.53],OOL:[-28.16,153.50],CNS:[-16.89,145.76],HBA:[-42.84,147.51],DRW:[-12.41,130.88],CBR:[-35.31,149.19],AKL:[-37.01,174.79],CHC:[-43.49,172.53],WLG:[-41.33,174.81],ZQN:[-45.02,168.74],NAN:[-17.76,177.44],PPT:[-17.56,-149.61],HND:[35.55,139.78],NRT:[35.77,140.39],KIX:[34.43,135.24],ITM:[34.79,135.44],NGO:[34.86,136.81],FUK:[33.59,130.45],CTS:[42.78,141.69],OKA:[26.20,127.65],ICN:[37.46,126.44],GMP:[37.56,126.79],PUS:[35.18,128.94],TPE:[25.08,121.23],HKG:[22.31,113.92],PVG:[31.14,121.81],PEK:[40.08,116.58],CAN:[23.39,113.30],CTU:[30.58,103.95],SIN:[1.36,103.99],KUL:[2.75,101.71],BKK:[13.69,100.75],HKT:[8.11,98.32],CNX:[18.77,98.96],SGN:[10.82,106.65],HAN:[21.22,105.81],DAD:[16.04,108.20],MNL:[14.51,121.02],CGK:[-6.13,106.66],DPS:[-8.75,115.17],DEL:[28.56,77.10],BOM:[19.09,72.87],BLR:[13.20,77.71],MAA:[12.99,80.17],KTM:[27.70,85.36],CMB:[7.18,79.88],MLE:[4.19,73.53],DAC:[23.84,90.40],DXB:[25.25,55.36],AUH:[24.43,54.65],DOH:[25.27,51.61],IST:[41.26,28.74],TLV:[32.01,34.89],CAI:[30.12,31.41],JNB:[-26.14,28.25],CPT:[-33.97,18.60],NBO:[-1.32,36.93],CMN:[33.37,-7.59],ADD:[8.98,38.80],LHR:[51.47,-0.45],LGW:[51.15,-0.18],MAN:[53.35,-2.27],EDI:[55.95,-3.37],DUB:[53.42,-6.27],CDG:[49.01,2.55],AMS:[52.31,4.76],BRU:[50.90,4.48],FRA:[50.04,8.56],MUC:[48.35,11.79],BER:[52.36,13.50],ZRH:[47.46,8.55],GVA:[46.24,6.11],VIE:[48.11,16.57],PRG:[50.10,14.26],BUD:[47.44,19.26],WAW:[52.17,20.97],CPH:[55.62,12.65],ARN:[59.65,17.92],OSL:[60.19,11.10],HEL:[60.32,24.96],KEF:[63.99,-22.62],MAD:[40.49,-3.57],BCN:[41.30,2.08],LIS:[38.77,-9.13],OPO:[41.24,-8.68],FCO:[41.80,12.25],MXP:[45.63,8.72],VCE:[45.51,12.35],ATH:[37.94,23.94],JFK:[40.64,-73.78],EWR:[40.69,-74.17],BOS:[42.36,-71.01],IAD:[38.95,-77.46],ATL:[33.64,-84.43],MIA:[25.80,-80.29],ORD:[41.98,-87.90],DFW:[32.90,-97.04],DEN:[39.86,-104.67],LAX:[33.94,-118.41],SFO:[37.62,-122.38],SEA:[47.45,-122.31],LAS:[36.08,-115.15],HNL:[21.32,-157.92],YYZ:[43.68,-79.63],YVR:[49.19,-123.18],YUL:[45.47,-73.74],MEX:[19.44,-99.07],CUN:[21.04,-86.87],GRU:[-23.43,-46.47],GIG:[-22.81,-43.25],EZE:[-34.82,-58.54],SCL:[-33.39,-70.79],LIM:[-12.02,-77.11],BOG:[4.70,-74.15]};
+function distKm(a,b){const A=COORD[a&&a.code],B=COORD[b&&b.code];if(!A||!B)return 0;const r=x=>x*Math.PI/180,dl=r(B[1]-A[1]),p1=r(A[0]),p2=r(B[0]);return 6371*2*Math.asin(Math.sqrt(Math.sin((p2-p1)/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2))}
+function estDur(a,b){const d=distKm(a,b);return d?Math.round(d/(d>3000?850:d>1000?780:700)*60+30):0}
+
+/* Airlines: those based in each country, and big hub carriers that often connect long trips. */
+const CC_AL={AU:['Qantas','Jetstar','Virgin Australia'],NZ:['Air New Zealand','Jetstar'],JP:['Japan Airlines','ANA','Peach','ZIPAIR'],SG:['Singapore Airlines','Scoot'],MY:['Malaysia Airlines','AirAsia X'],TH:['Thai Airways','Thai AirAsia X'],HK:['Cathay Pacific','HK Express'],TW:['EVA Air','China Airlines'],KR:['Korean Air','Asiana Airlines'],CN:['Air China','China Eastern','China Southern'],PH:['Philippine Airlines','Cebu Pacific'],ID:['Garuda Indonesia','Batik Air'],VN:['Vietnam Airlines','Vietjet'],IN:['Air India','IndiGo'],NP:['Nepal Airlines'],LK:['SriLankan Airlines'],MV:['Maldivian'],BD:['Biman Bangladesh'],AE:['Emirates','Etihad Airways','flydubai'],QA:['Qatar Airways'],TR:['Turkish Airlines','Pegasus'],IL:['El Al'],EG:['EgyptAir'],ZA:['South African Airways'],KE:['Kenya Airways'],MA:['Royal Air Maroc'],ET:['Ethiopian Airlines'],GB:['British Airways','Virgin Atlantic','easyJet'],IE:['Aer Lingus','Ryanair'],FR:['Air France'],NL:['KLM'],BE:['Brussels Airlines'],DE:['Lufthansa','Condor'],CH:['Swiss'],AT:['Austrian Airlines'],CZ:['Czech Airlines'],HU:['Wizz Air'],PL:['LOT Polish Airlines'],DK:['SAS'],SE:['SAS'],NO:['Norwegian','SAS'],FI:['Finnair'],IS:['Icelandair'],ES:['Iberia','Vueling'],PT:['TAP Air Portugal'],IT:['ITA Airways'],GR:['Aegean Airlines'],US:['United Airlines','American Airlines','Delta Air Lines','Hawaiian Airlines'],CA:['Air Canada','WestJet'],MX:['Aeromexico'],BR:['LATAM','GOL'],AR:['Aerolineas Argentinas'],CL:['LATAM'],PE:['LATAM'],CO:['Avianca'],FJ:['Fiji Airways'],PF:['Air Tahiti Nui']};
+const HUB_AL=['Singapore Airlines','Cathay Pacific','Emirates','Qatar Airways','Etihad Airways','Turkish Airlines','Malaysia Airlines','Thai Airways','Korean Air','EVA Air','Philippine Airlines','Air New Zealand','Qantas','Lufthansa','Air France','KLM','British Airways'];
+
+/* ================= helpers ================= */
+const DAY=864e5,HR=36e5;
+const $=s=>document.querySelector(s);
+const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad=n=>String(n).padStart(2,'0');
+const uid=()=>Math.random().toString(36).slice(2,9);
+const num=(v,d)=>{v=+v;return isFinite(v)?v:(d||0)};
+const isoMs=iso=>{const p=iso.split('-').map(Number);return Date.UTC(p[0],p[1]-1,p[2])};
+const msIso=ms=>{const d=new Date(ms);return d.getUTCFullYear()+'-'+pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate())};
+const addD=(iso,n)=>msIso(isoMs(iso)+n*DAY);
+const diffD=(a,b)=>Math.round((isoMs(b)-isoMs(a))/DAY);
+const fmtD=(iso,o)=>new Date(isoMs(iso)).toLocaleDateString(undefined,Object.assign({timeZone:'UTC'},o||{weekday:'short',day:'numeric',month:'short'}));
+const hmMin=s=>{const m=/^(\d{1,2}):(\d{2})$/.exec(s||'');return m?(+m[1])*60+(+m[2]):null};
+const minHm=m=>{m=((Math.round(m)%1440)+1440)%1440;return pad(Math.floor(m/60))+':'+pad(m%60)};
+const localToday=()=>{const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
+
+/* time zones, from the browser's own tz database so any airport works */
+const tzCache={};
+function tzFmt(tz){return tzCache[tz]||(tzCache[tz]=new Intl.DateTimeFormat('en-US',{timeZone:tz,hourCycle:'h23',year:'numeric',month:'numeric',day:'numeric',hour:'numeric',minute:'numeric',second:'numeric'}))}
+function tzOff(tz,u){const p={};tzFmt(tz).formatToParts(new Date(u)).forEach(x=>{p[x.type]=+x.value});return Math.round((Date.UTC(p.year,p.month-1,p.day,p.hour%24,p.minute,p.second)-Math.floor(u/1000)*1000)/60000)}
+function toUtc(iso,t,tz){const loc=isoMs(iso)+hmMin(t)*60000;let u=loc-tzOff(tz,loc)*60000;u=loc-tzOff(tz,u)*60000;return u}
+function fromUtc(u,tz){const l=u+tzOff(tz,u)*60000,d=new Date(l);return{date:msIso(l),time:pad(d.getUTCHours())+':'+pad(d.getUTCMinutes())}}
+const durTxt=m=>Math.floor(m/60)+' h '+pad(m%60)+' min';
+const validTz=tz=>{try{tzFmt(tz);return true}catch(e){return false}};
+
+/* money */
+const fmtCache={};
+function money(n,cur){try{const f=fmtCache[cur]||(fmtCache[cur]=new Intl.NumberFormat(undefined,{style:'currency',currency:cur,maximumFractionDigits:0}));return f.format(Math.round(n))}catch(e){return cur+' '+Math.round(n).toLocaleString()}}
+const hasRate=()=>S.hcur===S.dcur||num(S.rate)>0;
+const rateOf=()=>S.hcur===S.dcur?1:num(S.rate);
+function both(n){
+  const d=money(n,S.dcur);
+  if(S.hcur===S.dcur||!(num(S.rate)>0))return '<span class="yen">'+d+'</span>';
+  const h=money(n/S.rate,S.hcur);
+  return S.show==='home'?'<span class="yen">'+h+'</span> <span class="sub">about '+d+'</span>':'<span class="yen">'+d+'</span> <span class="sub">about '+h+'</span>';
+}
+
+/* ================= state ================= */
+const LS='waypoint-v1';
+const CITY_COLORS=['#f39700','#1b9a5a','#e5171f','#7b61b3','#0b8fc4','#6b8e23','#c24d86','#2d7f9d'];
+let DB={active:null,order:[],trips:{}};
+let S=null;
+function blankFlight(from,to,date){return {from:from||null,to:to||null,date:date,fl:'',al:'',alo:0,num:'',dep:'',board:'',arr:'',dur:0,via:[]}}
+function newTrip(o){
+  return {id:uid(),v:2,name:o.name||o.dest,dest:o.dest,pack:o.pack||null,hcur:o.hcur,dcur:o.dcur||'',rate:o.rate||0,rateNote:o.rateNote||'',trav:o.trav||2,
+    out:blankFlight(o.home,o.to,o.depart),ret:blankFlight(o.to,o.home,o.back),stays:[],plan:{},places:[],hotels:[],areas:{},cities:{},guide:null,check:{},flightOpts:{},
+    food:o.food||0,trans:o.trans||0,other:0,show:'dest',sample:false,ai:{},updated:Date.now()};
+}
+function jpCities(){const c={};JP.CORDER.forEach(k=>{const x=JP.CITIES[k];c[k]={n:x.n,jp:x.jp,c:x.c,lat:x.lat,lon:x.lon}});return c}
+function sampleTrip(){
+  const t=newTrip({dest:'Japan',pack:'japan',home:AP.SYD,to:AP.HND,depart:'2026-10-22',back:'2026-11-01',hcur:'AUD',dcur:'JPY',rate:109.9,trav:2,food:6000,trans:1500});
+  t.rateNote='Mid-market rate on 16 October 2026. Your bank will give a little less.';
+  t.cities=jpCities();
+  t.stays=[{id:'s1',hid:'amanek',name:'Hotel Amanek Asakusa Ekimae',city:'tokyo',area:'Asakusa',lat:35.7099,lon:139.7965,p:20000,in:'2026-10-22',out:'2026-11-01',rate:0,src:'pack'}];
+  t.sample=true;return t;
+}
+function loadDB(){
+  try{const r=localStorage.getItem(LS);if(r){const o=JSON.parse(r);if(o&&o.trips&&o.trips[o.active]){DB=o;S=DB.trips[DB.active];return}}}catch(e){}
+  const t=sampleTrip();DB={active:t.id,order:[t.id],trips:{[t.id]:t}};S=t;
+}
+let warned=false;
+function persist(){
+  S.updated=Date.now();S.sample=false;
+  try{localStorage.setItem(LS,JSON.stringify(DB))}catch(e){if(!warned){warned=true;setTimeout(()=>toast('Your browser would not save changes. Use Backup to keep a copy.'),50)}}
+}
+function setActive(id){DB.active=id;S=DB.trips[id];try{localStorage.setItem(LS,JSON.stringify(DB))}catch(e){}}
+function addTrip(t){DB.trips[t.id]=t;DB.order.unshift(t.id);setActive(t.id)}
+function deleteTrip(id){delete DB.trips[id];DB.order=DB.order.filter(x=>x!==id);if(!DB.order.length){const t=newTrip({dest:'My trip',home:AP.SYD,depart:localToday(),back:addD(localToday(),7),hcur:'AUD',dcur:'USD',trav:2});DB.trips[t.id]=t;DB.order=[t.id]}if(DB.active===id)DB.active=DB.order[0];S=DB.trips[DB.active];try{localStorage.setItem(LS,JSON.stringify(DB))}catch(e){}}
+
+/* ================= data lookups ================= */
+const rawPlaces=()=>(S.pack==='japan'?JP.SPOTS:[]).concat(S.places);
+const rawHotels=()=>(S.pack==='japan'?JP.HOTELS:[]).concat(S.hotels);
+const allPlaces=()=>rawPlaces().filter(p=>S.cities[p.c]);
+const allHotels=()=>rawHotels().filter(h=>S.cities[h.c]);
+const placeById=id=>rawPlaces().find(p=>p.id===id);
+const hotelById=id=>rawHotels().find(h=>h.id===id);
+const cityKeys=()=>Object.keys(S.cities);
+const cityName=k=>S.cities[k]?S.cities[k].n:'';
+const cityColor=k=>S.cities[k]?S.cities[k].c:'#7a8794';
+function ensureCity(key,name,lat,lon){
+  key=String(key||name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||uid();
+  if(!S.cities[key])S.cities[key]={n:String(name||key).slice(0,40),c:CITY_COLORS[cityKeys().length%CITY_COLORS.length],lat:lat==null?null:lat,lon:lon==null?null:lon};
+  return key;
+}
+function areasFor(ck){
+  const a=((S.pack==='japan'&&JP.AREAS[ck])||S.areas[ck]||[]).slice();
+  const c=S.cities[ck];if(c&&c.lat!=null)a.push([c.n+' centre',c.lat,c.lon]);
+  return a;
+}
+const hmid=p=>(p.h1+p.h2)/2;
+const tierOf=s=>s>=4.7?'Must-do':s>=4.5?'Great':'Good';
+const tierCls=s=>s>=4.7?'t-must':s>=4.5?'t-great':'t-good';
+const hasPos=p=>p&&p.lat!=null&&p.lon!=null;
+function km(a,b){if(!hasPos(a)||!hasPos(b))return 9999;const R=6371,r=Math.PI/180,dl=(b.lat-a.lat)*r,dn=(b.lon-a.lon)*r,x=Math.sin(dl/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(x))}
+function distTxt(d){if(d>=9999)return '';if(d>60)return Math.round(d)+' km away';const m=Math.round(d*1000*1.25/80);return m<=20?'about '+Math.max(1,m)+' min walk':d.toFixed(1)+' km away'}
+const mapsLink=q=>'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q);
+function placeLink(p){return hasPos(p)?'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(p.n+' '+(cityName(p.c)||S.dest)):mapsLink(p.n+' '+S.dest)}
+
+/* ================= flights ================= */
+const ROUTES=JP.ROUTES;
+function routeKey(f){return f.from&&f.to?f.from.code+'-'+f.to.code:''}
+function flightChoices(f){
+  const k=routeKey(f),base=(ROUTES[k]||[]).map(r=>Object.assign({src:'pack'},r)),ai=(S.flightOpts[k]||[]);
+  return base.concat(ai.filter(a=>!base.some(b=>b.id===a.id)));
+}
+const viaOf=f=>Array.isArray(f&&f.via)?f.via.filter(v=>v&&v.code&&AP[v.code]):[];
+function legPlan(f){
+  /* airports in order: from, stopovers..., to; estimated minutes for each flown leg */
+  const pts=[f.from].concat(viaOf(f).map(v=>AP[v.code]),[f.to]),legs=[];
+  for(let i=0;i<pts.length-1;i++)legs.push(estDur(pts[i],pts[i+1]));
+  return {pts,legs};
+}
+function totalEst(f){
+  const v=viaOf(f);if(!v.length)return f.dur||estDur(f.from,f.to);
+  const lp=legPlan(f);if(lp.legs.some(x=>!x))return 0;
+  return lp.legs.reduce((a,b)=>a+b,0)+v.reduce((a,x)=>a+Math.round(num(x.mins,90)),0);
+}
+function airlineGroups(f){
+  const route=[];const add=(a,arr)=>{if(a&&!arr.includes(a))arr.push(a)};
+  flightChoices(f).forEach(x=>add(x.al,route));
+  [f.from,f.to].forEach(a=>a&&(CC_AL[a.cc]||[]).forEach(n=>add(n,route)));
+  const hubs=[];HUB_AL.forEach(n=>{if(!route.includes(n))hubs.push(n)});
+  return {route,hubs};
+}
+function flightCalc(f){
+  if(!f||!f.from||!f.to||!f.dep||!f.date)return {};
+  const depUtc=toUtc(f.date,f.dep,f.from.tz);let arrUtc=null,est=false;
+  if(f.arr&&hmMin(f.arr)!=null){for(let k=0;k<4&&arrUtc===null;k++){const c=toUtc(addD(f.date,k),f.arr,f.to.tz),d=c-depUtc;if(d>=HR&&d<=60*HR)arrUtc=c}}
+  if(arrUtc===null){const m=totalEst(f);if(m){arrUtc=depUtc+m*60000;est=!(f.dur&&!viaOf(f).length)}}
+  if(arrUtc===null)return {depUtc};
+  const l=fromUtc(arrUtc,f.to.tz);
+  return {depUtc,arrUtc,landDate:l.date,landTime:l.time,mins:Math.round((arrUtc-depUtc)/60000),plus:diffD(f.date,l.date),est};
+}
+function stopPlan(f){
+  const v=viaOf(f);if(!v.length||!f.dep||!f.date)return [];
+  const lp=legPlan(f);let t=toUtc(f.date,f.dep,f.from.tz);const out=[];
+  v.forEach((x,i)=>{const ap=AP[x.code],lm=lp.legs[i];if(!lm)return;const arr=t+lm*60000,dep=arr+Math.round(num(x.mins,90))*60000,a=fromUtc(arr,ap.tz),d=fromUtc(dep,ap.tz);out.push({ap,mins:Math.round(num(x.mins,90)),arr:a,dep:d});t=dep});
+  return out;
+}
+function tzDiffTxt(f){
+  if(!f.from||!f.to)return '';
+  const u=f.depUtc||toUtc(f.date,f.dep||'12:00',f.from.tz),d=tzOff(f.to.tz,u)-tzOff(f.from.tz,u);
+  if(!d)return 'Same time zone as '+f.from.city;
+  const a=Math.abs(d),h=Math.floor(a/60),m=a%60;
+  return f.to.city+' is '+h+(m?' h '+m+' min':' h')+(d>0?' ahead of ':' behind ')+f.from.city;
+}
+const boardTime=f=>{if(f.board)return f.board;const m=hmMin(f.dep);return m===null?'':minHm(m-45)};
+const airportBy=f=>{const m=hmMin(f.dep);return m===null?'':minHm(m-180)};
+function airportTip(ap){
+  if(!ap)return '';
+  if(JP.APTIP[ap.code])return JP.APTIP[ap.code];
+  return 'Allow 60 to 90 minutes after landing for immigration, bags and getting out of the airport. Check how to get into the city before you fly.';
+}
+function gcalLink(title,s,e,details,loc){const z=u=>{const d=new Date(u);return d.getUTCFullYear()+pad(d.getUTCMonth()+1)+pad(d.getUTCDate())+'T'+pad(d.getUTCHours())+pad(d.getUTCMinutes())+'00Z'};return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent(title)+'&dates='+z(s)+'/'+z(e)+'&details='+encodeURIComponent(details||'')+'&location='+encodeURIComponent(loc||'')}
+function gcalDays(title,a,b,loc){return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent(title)+'&dates='+a.replace(/-/g,'')+'/'+b.replace(/-/g,'')+'&location='+encodeURIComponent(loc||'')}
+
+/* ================= trip structure ================= */
+function landingDate(){const c=flightCalc(S.out);return c.landDate||S.out.date}
+function tripDays(){const a=S.out.date,b=S.ret.date;if(!a||!b||diffD(a,b)<0)return [];const r=[];for(let i=0,n=diffD(a,b);i<=n;i++)r.push(addD(a,i));return r}
+function nightList(){const f=landingDate(),l=addD(S.ret.date,-1),r=[];if(diffD(f,l)<0)return r;for(let d=f;d<=l;d=addD(d,1))r.push(d);return r}
+const stayForNight=d=>S.stays.find(s=>s.in<=d&&d<s.out);
+function vacantRuns(){const runs=[];let cur=null;nightList().forEach(d=>{if(stayForNight(d)){cur=null}else if(cur&&addD(cur.to,1)===d){cur.to=d;cur.n++}else{cur={from:d,to:d,n:1};runs.push(cur)}});return runs}
+const stayOverlap=(a,b,skip)=>S.stays.find(s=>s.id!==skip&&a<s.out&&s.in<b);
+const baseStay=d=>stayForNight(d)||S.stays.find(s=>s.out===d)||null;
+function cityOfDay(d){const s=baseStay(d);if(s)return s.city;const k=cityKeys();return k[0]||''}
+function planFor(d){return (S.plan[d]||[]).slice().sort((a,b)=>(a.t||'99:99')<(b.t||'99:99')?-1:(a.t||'99:99')>(b.t||'99:99')?1:0)}
+function itemInfo(it){if(it.custom)return {n:it.n,h:it.h||1,y:it.y||0,custom:true};const p=placeById(it.id);return p?{n:p.n,h:hmid(p),y:p.y,yu:p.yu,c:p.c,p}:null}
+
+function needs(){
+  const a=[];
+  if(!S.out.to)a.push({t:'Choose where you land',d:'Pick your arrival airport so landing times are right',act:'tab',v:'flights',b:'Choose'});
+  if(!S.out.dep)a.push({t:'Choose your flight out',d:(S.out.from?S.out.from.city:'')+(S.out.to?' to '+S.out.to.city:'')+' on '+fmtD(S.out.date),act:'tab',v:'flights',b:'Choose'});
+  if(!S.ret.dep)a.push({t:'Choose your flight home',d:(S.ret.from?S.ret.from.city:'')+(S.ret.to?' to '+S.ret.to.city:'')+' on '+fmtD(S.ret.date),act:'tab',v:'flights',b:'Choose'});
+  vacantRuns().forEach(r=>a.push({t:r.n+' night'+(r.n>1?'s':'')+' without a stay',d:fmtD(r.from)+' to '+fmtD(addD(r.to,1)),act:'pickstay',from:r.from,to:addD(r.to,1),b:'Pick a stay'}));
+  const land=landingDate();
+  S.stays.forEach(s=>{
+    if(diffD(s.in,s.out)<=0)a.push({t:s.name+' has no nights',d:'Check-out must be after check-in',act:'editstay',sid:s.id,b:'Fix'});
+    else if(s.in<land&&S.out.dep)a.push({t:'Your stay at '+s.name+' starts before you land',d:'You land '+fmtD(land)+' but check in '+fmtD(s.in),act:'editstay',sid:s.id,b:'Fix'});
+  });
+  if(!S.dcur)a.push({t:'Choose the destination currency',d:'Needed for costs',act:'settings',b:'Choose'});
+  else if(!hasRate())a.push({t:'Enter today’s exchange rate',d:S.dcur+' per 1 '+S.hcur+', so costs show in both currencies',act:'settings',b:'Enter'});
+  return a;
+}
+
+/* ================= budget ================= */
+function budget(){
+  const nd=tripDays().length;let act=0;
+  Object.keys(S.plan).forEach(d=>(S.plan[d]||[]).forEach(it=>{const i=itemInfo(it);if(i)act+=(i.y||0)*S.trav}));
+  let stays=0,est=false;
+  S.stays.forEach(s=>{const n=diffD(s.in,s.out);if(n>0){const r=s.rate>0?s.rate:(s.p||0);if(!(s.rate>0))est=true;stays+=n*r}});
+  const food=S.food*S.trav*nd,trans=S.trans*S.trav*nd,other=S.other||0;
+  return {act,food,trans,stays,stayEst:est,other,total:act+food+trans+stays+other,nd};
+}
+
+/* ================= automatic day planner ================= */
+function dayWindow(d){
+  const fo=flightCalc(S.out);let st=570,en=1140;
+  if(fo.landDate){
+    if(d===S.out.date&&fo.landDate!==d)return null;
+    if(d===fo.landDate)st=Math.max(st,hmMin(fo.landTime)+180);
+  }else if(d===S.out.date)st=840;
+  if(d===S.ret.date)en=S.ret.dep?Math.min(en,hmMin(S.ret.dep)-300):Math.min(en,720);
+  return en-st>=90?[st,en]:null;
+}
+function nnOrder(list){
+  if(list.length<2)return list.slice();
+  const left=list.slice(),out=[];let cur=left.reduce((a,b)=>b.s>a.s?b:a);
+  left.splice(left.indexOf(cur),1);out.push(cur);
+  while(left.length){let bi=0,bd=1e9;left.forEach((p,i)=>{const d=km(cur,p);if(d<bd){bd=d;bi=i}});cur=left.splice(bi,1)[0];out.push(cur)}
+  return out;
+}
+function autoDay(d,used){
+  const w=dayWindow(d);if(!w)return 0;
+  const city=cityOfDay(d);if(!city)return 0;
+  const pool=allPlaces().filter(p=>p.c===city&&hasPos(p)&&!used.has(p.id)).sort((a,b)=>b.s-a.s);
+  const cap=Math.min(w[1]-w[0],540);
+  const seed=pool.find(p=>hmid(p)*60<=cap);if(!seed)return 0;
+  const picked=[seed];let mins=hmid(seed)*60;
+  while(picked.length<5&&mins<cap-60){
+    const cx={lat:picked.reduce((a,p)=>a+p.lat,0)/picked.length,lon:picked.reduce((a,p)=>a+p.lon,0)/picked.length};
+    const lunch=picked.length>=2?60:0;
+    const c=pool.filter(p=>!picked.includes(p)&&p.s>=4.3&&km(cx,p)<=6&&mins+hmid(p)*60+30<=cap-lunch&&hmid(p)<=5)
+      .map(p=>({p,v:p.s-0.25*km(cx,p)})).sort((a,b)=>b.v-a.v)[0];
+    if(!c)break;
+    picked.push(c.p);mins+=hmid(c.p)*60+30;
+  }
+  const rank=p=>p.k==='view'?2:p.k==='food'?1:0;
+  const seq=[].concat(nnOrder(picked.filter(p=>rank(p)===0)),picked.filter(p=>rank(p)===1),picked.filter(p=>rank(p)===2));
+  let t=w[0];const items=[];
+  seq.forEach((p,i)=>{
+    if(p.k==='food')t=Math.max(t,690);
+    if(p.k==='view')t=Math.max(t,960);
+    t=Math.round(t/15)*15;
+    items.push({id:p.id,t:minHm(t),auto:true});used.add(p.id);
+    t+=hmid(p)*60+30;
+    if(t>720&&t<780&&i<seq.length-1&&seq[i+1].k!=='food')t=780;
+  });
+  S.plan[d]=items;return items.length;
+}
+function usedIds(){const u=new Set();Object.keys(S.plan).forEach(d=>(S.plan[d]||[]).forEach(it=>{if(!it.custom)u.add(it.id)}));return u}
+function autoPlanAll(){const used=usedIds();let n=0;tripDays().forEach(d=>{if(!(S.plan[d]||[]).length&&autoDay(d,used))n++});return n}
+function clearAuto(){let n=0;Object.keys(S.plan).forEach(d=>{const k=(S.plan[d]||[]).filter(it=>!it.auto);n+=(S.plan[d]||[]).length-k.length;if(k.length)S.plan[d]=k;else delete S.plan[d]});return n}
+function emptyPlannable(){return tripDays().filter(d=>!(S.plan[d]||[]).length&&dayWindow(d)&&cityOfDay(d)&&allPlaces().some(p=>p.c===cityOfDay(d)&&hasPos(p)))}
+
+/* ================= exports ================= */
+function itinText(){
+  const out=[S.name.toUpperCase()+'  '+fmtD(S.out.date,{day:'numeric',month:'short'})+' to '+fmtD(S.ret.date,{day:'numeric',month:'short',year:'numeric'}),S.trav+' traveller'+(S.trav>1?'s':''),''];
+  const fo=flightCalc(S.out),fr=flightCalc(S.ret);
+  const fl=(f,c)=>f.dep?(f.num?f.num+', ':'')+f.dep+' '+(f.from?f.from.code:'')+(c.landTime?' to '+c.landTime+' '+f.to.code+(c.plus?' (+'+c.plus+')':''):''):'not chosen';
+  tripDays().forEach(d=>{
+    out.push(fmtD(d,{weekday:'long',day:'numeric',month:'long'}));
+    if(d===S.out.date)out.push('  Flight out: '+fl(S.out,fo));else if(fo.landDate===d)out.push('  Landing '+fo.landTime+' at '+S.out.to.city);
+    const ob=S.stays.find(s=>s.out===d);if(ob)out.push('  Check out: '+ob.name);
+    const n=stayForNight(d);if(n)out.push('  '+(n.in===d?'Check in: ':'Staying: ')+n.name);else if(nightList().includes(d))out.push('  No stay booked');
+    planFor(d).forEach(it=>{const i=itemInfo(it);if(i)out.push('  '+(it.t?it.t+'  ':'')+i.n)});
+    if(d===S.ret.date)out.push('  Flight home: '+fl(S.ret,fr));
+    out.push('');
+  });
+  return out.join('\n');
+}
+const icsEsc=t=>String(t).replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n');
+const icsUtc=u=>{const d=new Date(u);return d.getUTCFullYear()+pad(d.getUTCMonth()+1)+pad(d.getUTCDate())+'T'+pad(d.getUTCHours())+pad(d.getUTCMinutes())+'00Z'};
+function buildIcs(){
+  const L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Waypoint//Trip planner//EN','CALSCALE:GREGORIAN'];
+  const ev=(k,lines,sum,desc,loc)=>{L.push('BEGIN:VEVENT','UID:'+uid()+k+'@waypoint','DTSTAMP:'+icsUtc(Date.now()));lines.forEach(x=>L.push(x));L.push('SUMMARY:'+icsEsc(sum));if(desc)L.push('DESCRIPTION:'+icsEsc(desc));if(loc)L.push('LOCATION:'+icsEsc(loc));L.push('END:VEVENT')};
+  [['out','Flight out'],['ret','Flight home']].forEach(([w,lab])=>{const f=S[w],c=flightCalc(f);if(c.depUtc&&c.arrUtc)ev(w,['DTSTART:'+icsUtc(c.depUtc),'DTEND:'+icsUtc(c.arrUtc)],lab+' '+(f.num||''),'Boarding '+boardTime(f)+'. Lands '+c.landTime+' local time.',f.from.city+' airport')});
+  S.stays.forEach(s=>{if(diffD(s.in,s.out)>0)ev('st'+s.id,['DTSTART;VALUE=DATE:'+s.in.replace(/-/g,''),'DTEND;VALUE=DATE:'+s.out.replace(/-/g,'')],'Stay: '+s.name,'',s.name+' '+cityName(s.city))});
+  const tz=S.out.to&&validTz(S.out.to.tz)?S.out.to.tz:null;
+  Object.keys(S.plan).sort().forEach(d=>(S.plan[d]||[]).forEach((it,i)=>{
+    const inf=itemInfo(it);if(!inf)return;
+    const loc=inf.p?cityName(inf.p.c):'';
+    if(it.t&&tz){const s=isoMs(d)+hmMin(it.t)*60000,e=s+Math.round((inf.h||1)*60)*60000,f=ms=>{const x=new Date(ms);return x.getUTCFullYear()+pad(x.getUTCMonth()+1)+pad(x.getUTCDate())+'T'+pad(x.getUTCHours())+pad(x.getUTCMinutes())+'00'};
+      ev('a'+d+i,['DTSTART;TZID='+tz+':'+f(s),'DTEND;TZID='+tz+':'+f(e)],inf.n,inf.p?inf.p.t:'',loc)}
+    else ev('a'+d+i,['DTSTART;VALUE=DATE:'+d.replace(/-/g,''),'DTEND;VALUE=DATE:'+addD(d,1).replace(/-/g,'')],inf.n,inf.p?inf.p.t:'',loc);
+  }));
+  L.push('END:VCALENDAR');return L.join('\r\n');
+}
+const b64u=bytes=>{let s='';for(let i=0;i<bytes.length;i+=8192)s+=String.fromCharCode.apply(null,bytes.subarray(i,i+8192));return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')};
+const unb64u=t=>{t=t.replace(/-/g,'+').replace(/_/g,'/');while(t.length%4)t+='=';const s=atob(t),a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return a};
+async function tripCode(){
+  const bytes=new TextEncoder().encode(JSON.stringify(S));
+  if(window.CompressionStream){try{const cs=new CompressionStream('gzip'),w=cs.writable.getWriter();w.write(bytes);w.close();return 'WP1.'+b64u(new Uint8Array(await new Response(cs.readable).arrayBuffer()))}catch(e){}}
+  return 'WP0.'+b64u(bytes);
+}
+async function parseTrip(code){
+  code=String(code||'').trim();const m=/^(WP[01])\.([A-Za-z0-9_-]+)$/.exec(code);if(!m)throw new Error('That is not a trip code.');
+  let bytes=unb64u(m[2]);
+  if(m[1]==='WP1'){if(!window.DecompressionStream)throw new Error('This browser cannot open that code.');const ds=new DecompressionStream('gzip'),w=ds.writable.getWriter();w.write(bytes);w.close();bytes=new Uint8Array(await new Response(ds.readable).arrayBuffer())}
+  return validateImport(JSON.parse(new TextDecoder().decode(bytes)));
+}
+function validateImport(o){
+  if(!o||typeof o!=='object'||!o.out||!o.ret||!Array.isArray(o.stays)||typeof o.out.date!=='string'||typeof o.ret.date!=='string')throw new Error('That file is not a Waypoint trip.');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(o.out.date)||!/^\d{4}-\d{2}-\d{2}$/.test(o.ret.date))throw new Error('The trip dates are not readable.');
+  const t=Object.assign(newTrip({dest:String(o.dest||'Trip'),home:null,depart:o.out.date,back:o.ret.date,hcur:'USD'}),o);
+  t.id=uid();t.sample=false;t.plan=t.plan||{};t.places=t.places||[];t.hotels=t.hotels||[];t.areas=t.areas||{};t.cities=t.cities||{};t.check=t.check||{};t.flightOpts=t.flightOpts||{};t.ai=t.ai||{};
+  return t;
+}
+
+/* ================= Claude (optional) ================= */
+let SAMPLE=null,DL=null;
+async function ask(prompt){if(!SAMPLE)throw {code:'unavailable'};return SAMPLE.json(prompt,{modelTier:'default'})}
+function aiErr(e){const c=e&&e.code;return c==='not_granted'||c==='sampling_disabled'?'Claude was not allowed to help here. You can still add everything yourself.':c==='rate_limited'?'Too many requests just now. Try again in a few minutes.':c==='invalid_json'||c==='empty_completion'?'Claude’s answer could not be read. Try again.':c==='cancelled'?'':c==='unavailable'?'Suggestions are only available when this page is open in Claude.':'Could not reach Claude. Try again.'}
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+const cleanStr=(v,n)=>String(v==null?'':v).replace(/[\u0000-\u001f]/g,' ').trim().slice(0,n||120);
+const goodLat=v=>isFinite(+v)&&Math.abs(+v)<=90&&v!==null&&v!==''&&+v!==0;
+const goodLon=v=>isFinite(+v)&&Math.abs(+v)<=180&&v!==null&&v!==''&&+v!==0;
+
+async function aiOverview(){
+  const nights=Math.max(1,diffD(S.out.date,S.ret.date));
+  const o=await ask(`You are a careful travel researcher helping plan a trip.
+Trip: ${S.dest}, ${S.out.date} to ${S.ret.date} (${nights} nights), ${S.trav} traveller(s) flying from ${S.out.from?S.out.from.city:'home'}. The traveller's home currency is ${S.hcur}.
+Reply with ONLY one JSON object, no other text:
+{"destination":"short name","currency":"ISO 4217 code","ratePerHome":0,"dailyFood":0,"dailyTransport":0,"airports":["IATA"],"cities":[{"key":"lowercase-slug","name":"","lat":0,"lon":0,"nights":0,"why":""}],"areas":[{"city":"key","name":"","lat":0,"lon":0}],"guide":{"entry":[""],"money":[""],"transport":[""],"culture":[""],"safety":[""],"weather":[""],"power":[""]}}
+Rules:
+- currency is the destination's currency. ratePerHome is roughly how many units of it one ${S.hcur} buys; use 0 if unsure.
+- dailyFood and dailyTransport are mid-range per-person daily costs in the destination currency.
+- airports: up to 3 main international arrival airports.
+- cities: 1 to 4 real bases that suit ${nights} nights, with real coordinates to 3 decimals. nights should add up to about ${nights}.
+- areas: 3 to 5 good neighbourhoods to stay in for each city, with real coordinates.
+- guide: at most 4 short practical points per list. Weather must fit the travel dates. For entry rules say what to check and where; do not state visa rules you are unsure of.
+- Real places only. No marketing language.`);
+  if(!o||typeof o!=='object')throw {code:'invalid_json'};
+  if(!S.dcur&&/^[A-Z]{3}$/.test(o.currency||''))S.dcur=o.currency;
+  if(S.dcur===S.hcur)S.rate=1;
+  else if(!(num(S.rate)>0)&&num(o.ratePerHome)>0){S.rate=+(+o.ratePerHome).toPrecision(4);S.rateNote='Rough rate suggested by Claude. Check today’s rate with your bank.'}
+  if(!S.food&&num(o.dailyFood)>0)S.food=Math.round(+o.dailyFood);
+  if(!S.trans&&num(o.dailyTransport)>0)S.trans=Math.round(+o.dailyTransport);
+  if(!S.out.to&&Array.isArray(o.airports)){const a=o.airports.map(x=>AP[String(x).toUpperCase()]).find(Boolean);if(a){S.out.to=a;S.ret.from=a}}
+  (Array.isArray(o.cities)?o.cities:[]).slice(0,4).forEach(c=>{if(c&&c.name){const k=ensureCity(c.key,cleanStr(c.name,40),goodLat(c.lat)?+c.lat:null,goodLon(c.lon)?+c.lon:null);S.cities[k].why=cleanStr(c.why,140);S.cities[k].nights=num(c.nights)}});
+  (Array.isArray(o.areas)?o.areas:[]).slice(0,20).forEach(a=>{const k=cityKeys().find(x=>x===String(a.city||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''))||cityKeys().find(x=>cityName(x).toLowerCase()===String(a.city||'').toLowerCase());
+    if(k&&a.name&&goodLat(a.lat)&&goodLon(a.lon)){(S.areas[k]=S.areas[k]||[]).push([cleanStr(a.name,40),+a.lat,+a.lon])}});
+  if(o.guide&&typeof o.guide==='object'){const g={};['entry','money','transport','culture','safety','weather','power'].forEach(k=>{if(Array.isArray(o.guide[k]))g[k]=o.guide[k].slice(0,4).map(x=>cleanStr(x,260)).filter(Boolean)});S.guide=g}
+  S.ai.overview=true;
+}
+async function aiPlaces(ck,cat){
+  const c=S.cities[ck],have=allPlaces().filter(p=>p.c===ck).map(p=>p.n).slice(0,50).join('; ');
+  const arr=await ask(`You are a careful travel researcher. Reply with ONLY a JSON array of 12 objects${cat?' (all in category "'+cat+'")':' (a mix of categories)'} for visitors to ${c.n}, ${S.dest}:
+[{"name":"","area":"neighbourhood","lat":0,"lon":0,"cat":"food|view|sight|culture|nature|fun","score":4.5,"hMin":1,"hMax":2,"cost":0,"costNote":"","tip":""}]
+Rules: real, well-known places only, with real coordinates to 4 decimals. score is out of 5 and reflects how highly travellers generally rate the place; most should fall between 4.2 and 4.8 and only the very best reach 4.7 or more. hMin and hMax are the hours a first-time visitor typically needs. cost is the usual per-person cost in ${S.dcur||'the local currency'} (0 if free). costNote is at most 8 words. tip is one practical sentence of at most 22 words and mentions the usual closing day if there is one. Include at least 3 free places. Do not repeat any of these: ${have||'none'}.`);
+  if(!Array.isArray(arr))throw {code:'invalid_json'};
+  const have2=new Set(allPlaces().map(p=>p.n.toLowerCase()));let added=0;
+  arr.slice(0,16).forEach(x=>{
+    if(!x||!x.name||!goodLat(x.lat)||!goodLon(x.lon))return;
+    const n=cleanStr(x.name,80);if(have2.has(n.toLowerCase()))return;
+    const cat2=['food','view','sight','culture','nature','fun'].includes(x.cat)?x.cat:'sight';
+    let h1=clamp(num(x.hMin,1),0.25,12),h2=clamp(num(x.hMax,h1),h1,12);
+    S.places.push({id:'a'+uid(),n,c:ck,a:cleanStr(x.area,40),lat:+x.lat,lon:+x.lon,k:cat2,s:clamp(+(+x.score||4.3).toFixed(1),3.5,4.9),h1,h2,y:Math.max(0,Math.round(num(x.cost))),yl:cleanStr(x.costNote,70),st:'',ln:'',t:cleanStr(x.tip,200),src:'ai'});
+    have2.add(n.toLowerCase());added++;
+  });
+  return added;
+}
+async function aiHotels(ck){
+  const c=S.cities[ck],have=allHotels().filter(h=>h.c===ck).map(h=>h.n).join('; ');
+  const arr=await ask(`You are a careful travel researcher. Reply with ONLY a JSON array of 8 hotels in ${c.n}, ${S.dest}, a mix of budget, mid-range and upscale, and well placed for sightseeing:
+[{"name":"","area":"neighbourhood","lat":0,"lon":0,"price":0,"tag":""}]
+Rules: real, operating hotels only, with real coordinates to 4 decimals. price is the typical cost per night for a double room in ${S.dcur||'the local currency'}, a rough figure (0 if unsure). tag is at most 10 words on what makes it a good base. Do not repeat any of these: ${have||'none'}.`);
+  if(!Array.isArray(arr))throw {code:'invalid_json'};
+  const have2=new Set(allHotels().map(h=>h.n.toLowerCase()));let added=0;
+  arr.slice(0,10).forEach(x=>{if(!x||!x.name||!goodLat(x.lat)||!goodLon(x.lon))return;const n=cleanStr(x.name,80);if(have2.has(n.toLowerCase()))return;
+    S.hotels.push({id:'h'+uid(),n,c:ck,a:cleanStr(x.area,40),lat:+x.lat,lon:+x.lon,p:Math.max(0,Math.round(num(x.price))),t:cleanStr(x.tag,100),src:'ai'});have2.add(n.toLowerCase());added++});
+  return added;
+}
+async function aiFlights(f){
+  const wd=new Date(isoMs(f.date)).toLocaleDateString('en-US',{weekday:'long',timeZone:'UTC'});
+  const r=await ask(`You are a careful travel researcher. List airlines that usually fly ${f.from.city} (${f.from.code}) to ${f.to.city} (${f.to.code}), including usual one-stop options only if there is no nonstop. The traveller wants to fly on ${f.date} (${wd}).
+Reply with ONLY one JSON object: {"flights":[{"airline":"","flight":"","dep":"HH:MM","durationMin":0,"stops":0,"days":"Daily or e.g. Mon, Wed, Fri"}]}
+Rules: up to 6 entries, real airlines and typical flight numbers, dep is the usual local departure time at ${f.from.city} in 24-hour format, durationMin is the usual total travel time. If you are not sure a flight exists, leave it out. An empty list is acceptable.`);
+  const list=r&&Array.isArray(r.flights)?r.flights:[];const out=[];
+  list.slice(0,8).forEach(x=>{if(!x||!x.airline||!hmMin(String(x.dep||'').trim()))return;const d=num(x.durationMin);if(d<60||d>2400)return;
+    out.push({id:cleanStr(x.flight||x.airline,12)||cleanStr(x.airline,12),al:cleanStr(x.airline,40),dep:minHm(hmMin(String(x.dep).trim())),dur:Math.round(d),days:cleanStr(x.days||'Check dates',30)+(num(x.stops)>0?' · '+x.stops+' stop':''),src:'ai'})});
+  S.flightOpts[routeKey(f)]=out;return out.length;
+}
+
+/* ================= free open data: OpenStreetMap + Wikipedia (no account, no credits) ================= */
+async function jget(url,opt){
+  const c=new AbortController(),t=setTimeout(()=>c.abort(),25000);
+  try{const r=await fetch(url,Object.assign({signal:c.signal},opt||{}));if(!r.ok)throw {code:'http',status:r.status};return await r.json()}
+  catch(e){if(e&&e.code)throw e;throw {code:'net',message:String(e&&e.message||e)}}
+  finally{clearTimeout(t)}
+}
+function odErr(e){
+  if(e&&e.code==='http')return 'The free map service is busy ('+e.status+'). Wait a minute and try again.';
+  return 'Could not reach the free map data from here. It needs an internet connection and works best in the Netlify copy of the app.';
+}
+async function geoSearch(q){
+  const a=await jget('https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=7&accept-language=en&q='+encodeURIComponent(q));
+  return (Array.isArray(a)?a:[]).filter(x=>x&&x.lat&&x.lon).map(x=>{const ad=x.address||{};return {
+    name:cleanStr(x.name||ad.city||ad.town||ad.village||String(x.display_name||'').split(',')[0],60),
+    full:cleanStr(x.display_name,140),lat:+x.lat,lon:+x.lon,cc:String(ad.country_code||'').toUpperCase(),country:ad.country||'',
+    area:cleanStr(ad.suburb||ad.neighbourhood||ad.city_district||ad.quarter||ad.village||ad.town||ad.city||'',40),
+    city:cleanStr(ad.city||ad.town||ad.village||ad.municipality||ad.county||'',40),cls:x.category||x.class||'',type:x.type||''}});
+}
+const OD_SKIP=/(railway|metro|subway|bus|tram|station|airport|school|university|college|hospital|clinic|company|corporation|bank|prefecture|province|county|municipality|ward|city in|town in|village in|district in|suburb|locality|neighbourhood in|population|politician|footballer|player|actor|singer|writer|born|novel|film|album|song|episode|series|television|newspaper|highway|road|expressway|tunnel|dam|power station|cemetery|prison|church of|company|restaurant chain|hotel|ryokan|apartment|residential)/;
+const OD_RULES=[
+ ['view',/(tower|observation|viewpoint|lookout|skyscraper|peak|summit|observatory)/,0.75,1.25],
+ ['culture',/(museum|gallery|theatre|theater|opera|temple|shrine|church|cathedral|basilica|mosque|synagogue|monastery|abbey|library|memorial|monument|pagoda|mausoleum)/,1.25,2],
+ ['nature',/(park|garden|lake|beach|waterfall|falls|island|river|forest|reserve|canyon|bay|cave|hot spring|onsen|mountain|volcano|hill|coast|gorge|valley|trail)/,1.5,2.5],
+ ['fun',/(zoo|aquarium|amusement|theme park|stadium|arena|casino|theme|market|bazaar|shopping)/,1.5,3],
+ ['sight',/(castle|palace|fort|bridge|gate|square|plaza|ruins|historic|heritage|street|building|house|lighthouse|statue|fountain|town|old town|quarter)/,1,1.5]
+];
+function odClass(title,desc){
+  const d=(desc||'').toLowerCase(),t=(title||'').toLowerCase(),s=d+' '+t;
+  if(!d&&!/(temple|shrine|castle|museum|park|garden|tower|palace|lake|falls|gate|bridge)/.test(t))return null;
+  if(OD_SKIP.test(d))return null;
+  for(const r of OD_RULES)if(r[1].test(s))return {k:r[0],h1:r[2],h2:r[3]};
+  return null;
+}
+async function wikiNear(lat,lon){
+  const u='https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*&generator=geosearch&ggsradius=10000&ggslimit=50&prop=coordinates|description|pageviews&colimit=max&pvipdays=60&ggscoord='+lat+'%7C'+lon;
+  const j=await jget(u);const p=(j&&j.query&&j.query.pages)||{};
+  return Object.keys(p).map(k=>p[k]).map(x=>{
+    const c=x.coordinates&&x.coordinates[0];let v=0;if(x.pageviews)Object.keys(x.pageviews).forEach(d=>{v+=+x.pageviews[d]||0});
+    return c?{title:x.title,desc:x.description||'',lat:c.lat,lon:c.lon,views:v}:null}).filter(Boolean);
+}
+async function odPlaces(ck,limit){
+  const c=S.cities[ck];if(!c||c.lat==null)throw {code:'nocoord'};
+  const dl=14/111,dn=14/(111*Math.max(0.2,Math.cos(c.lat*Math.PI/180)));
+  const pts=[[c.lat,c.lon],[c.lat+dl,c.lon],[c.lat-dl,c.lon],[c.lat,c.lon+dn],[c.lat,c.lon-dn]];
+  const res=await Promise.allSettled(pts.map(p=>wikiNear(p[0],p[1])));
+  if(res.every(r=>r.status==='rejected'))throw res[0].reason;
+  const seen=new Set(),all=[];
+  res.forEach(r=>{if(r.status==='fulfilled')r.value.forEach(x=>{if(!seen.has(x.title)){seen.add(x.title);all.push(x)}})});
+  let list=all.map(x=>({x,cl:odClass(x.title,x.desc)})).filter(o=>o.cl&&km({lat:c.lat,lon:c.lon},o.x)<=30).sort((a,b)=>b.x.views-a.x.views).slice(0,limit||40);
+  const have=new Set(allPlaces().map(p=>p.n.toLowerCase())),n=list.length;let added=0;
+  list.forEach((o,i)=>{
+    const nm=cleanStr(o.x.title.replace(/\s*\(.*\)$/,''),80);if(have.has(nm.toLowerCase()))return;
+    const pc=n>1?i/(n-1):0,sc=clamp(+(4.9-0.8*Math.pow(pc,0.8)).toFixed(1),4,4.9);
+    S.places.push({id:'o'+uid(),n:nm,c:ck,a:'',lat:+o.x.lat.toFixed(5),lon:+o.x.lon.toFixed(5),k:o.cl.k,s:sc,h1:o.cl.h1,h2:o.cl.h2,y:0,yu:1,yl:'',st:'',ln:'',t:cleanStr(o.x.desc.charAt(0).toUpperCase()+o.x.desc.slice(1),200),src:'osm'});
+    have.add(nm.toLowerCase());added++;
+  });
+  return added;
+}
+const HOTEL_KIND={hotel:'Hotel',hostel:'Hostel',guest_house:'Guest house',apartment:'Apartments',motel:'Motel'};
+async function odHotels(ck){
+  const c=S.cities[ck];if(!c||c.lat==null)throw {code:'nocoord'};
+  const q='[out:json][timeout:25];(node["tourism"~"^(hotel|hostel|guest_house|apartment|motel)$"]["name"](around:6000,'+c.lat+','+c.lon+');way["tourism"~"^(hotel|hostel|guest_house|apartment|motel)$"]["name"](around:6000,'+c.lat+','+c.lon+'););out center tags 250;';
+  let j=null,err=null;
+  for(const ep of ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter']){
+    try{j=await jget(ep,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(q)});break}catch(e){err=e}
+  }
+  if(!j)throw err;
+  const have=new Set(allHotels().map(h=>h.n.toLowerCase()));
+  const rows=(j.elements||[]).map(e=>{const t=e.tags||{},la=e.lat!=null?e.lat:e.center&&e.center.lat,lo=e.lon!=null?e.lon:e.center&&e.center.lon;if(!t.name||la==null)return null;
+    const st=parseFloat(t.stars)||0,sc=st*2+(t.wikidata||t.wikipedia?3:0)+(t.website||t['contact:website']?1:0)+(t.phone||t['contact:phone']?0.5:0)+(t.tourism==='hotel'?1:0);
+    return {n:cleanStr(t.name,80),la,lo,st,sc,kind:HOTEL_KIND[t.tourism]||'Hotel',a:cleanStr(t['addr:suburb']||t['addr:neighbourhood']||t['addr:city_district']||'',40)}}).filter(Boolean);
+  rows.sort((a,b)=>b.sc-a.sc);let added=0;
+  rows.slice(0,45).forEach(r=>{const k=r.n.toLowerCase();if(have.has(k))return;have.add(k);
+    S.hotels.push({id:'o'+uid(),n:r.n,c:ck,a:r.a,lat:+(+r.la).toFixed(5),lon:+(+r.lo).toFixed(5),p:0,t:(r.st?r.st+'-star ':'')+r.kind.toLowerCase()+'. Price not listed.',src:'osm'});added++});
+  return added;
+}
+function setCityGeo(ck,g){
+  const c=S.cities[ck];if(!c)return;if(g.lat!=null){c.lat=+(+g.lat).toFixed(4);c.lon=+(+g.lon).toFixed(4)}
+  if(g.cc){c.cc=g.cc;if((!S.dcur||S.dcurAuto)&&CUR_BY_CC[g.cc]){S.dcur=CUR_BY_CC[g.cc];S.dcurAuto=false;if(S.hcur&&S.hcur===S.dcur)S.rate=1;else{S.rate=0;S.rateNote='';liveRate()}}}
+}
+/* add a searched place as a city and fill it from open data */
+async function odAddCity(g,onStep){
+  const dupe=cityKeys().find(k=>cityName(k).toLowerCase()===g.name.toLowerCase());
+  const ck=dupe||ensureCity(g.name,g.name,g.lat,g.lon);setCityGeo(ck,g);persist();
+  let p=0,h=0,perr=null;
+  if(onStep)onStep('Finding sights in '+g.name+'…');
+  try{p=await odPlaces(ck)}catch(e){perr=e}
+  persist();
+  if(onStep)onStep('Finding hotels in '+g.name+'…');
+  try{h=await odHotels(ck)}catch(e){perr=perr||e}
+  persist();
+  return {ck,p,h,err:perr&&!p&&!h?perr:null};
+}
+
+async function liveRate(){
+  const T=S;if(!T.hcur||!T.dcur||T.hcur===T.dcur)return;
+  try{
+    const j=await jget('https://open.er-api.com/v6/latest/'+encodeURIComponent(T.hcur));
+    const r=j&&j.rates&&j.rates[T.dcur];
+    if(r>0&&S===T&&!(num(T.rate)>0)){T.rate=+(+r).toPrecision(5);T.rateNote='Live mid-market rate today. Your bank will give a little less.';persist();render(true)}
+  }catch(e){}
+}
+
+/* ================= UI state and small helpers ================= */
+const IN_VIEWER=!!(window.claude&&typeof window.claude.use==='function');
+const U={tab:'trip',city:'all',cat:'all',sort:'top',view:'list',target:null,ref:null,sel:null,sheet:null,build:null,busy:{},msg:{}};
+const canSave=()=>!!DL||!IN_VIEWER;
+const IC={
+ trip:'<circle cx="6" cy="6" r="2.2"/><circle cx="18" cy="18" r="2.2"/><path d="M8.2 6H13a3.5 3.5 0 0 1 0 7h-2a3.5 3.5 0 0 0 0 7h5.6"/>',
+ flights:'<path d="M22 2 11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>',
+ stays:'<path d="M3 19V8"/><path d="M3 15h18v4"/><path d="M21 15v-3a3 3 0 0 0-3-3h-7v6"/><circle cx="7" cy="12" r="1.6"/>',
+ explore:'<circle cx="12" cy="12" r="9.5"/><path d="M16.2 7.8l-2.1 6.3-6.3 2.1 2.1-6.3z"/>',
+ guide:'<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/>',
+ gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+ trips:'<rect x="3" y="4" width="18" height="5" rx="1.5"/><rect x="3" y="11" width="18" height="5" rx="1.5"/><path d="M3 19h12"/>',
+ clock:'<circle cx="12" cy="12" r="9.5"/><path d="M12 7v5l3 2"/>',
+ yen:'<circle cx="12" cy="12" r="9.5"/><path d="M12 6.5v11M9.5 9h4a2 2 0 0 1 0 4h-3a2 2 0 0 0 0 4h4.5"/>',
+ plane:'<path d="M2.5 14.5l8-3V5.7a1.5 1.5 0 0 1 3 0v5.8l8 3v2l-8-1.7v3.4l2.5 1.6v1.7L12 20.5 8 22.5v-1.7l2.5-1.6v-3.4l-8 1.7z"/>',
+ spark:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/>'
+};
+const ic=(n,sw)=>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||2)+'" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+IC[n]+'</svg>';
+const LOGO='<svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#14202e"/><circle cx="26" cy="15" r="9" fill="#ff7fae"/><path d="M8 32c8 0 7-7 12-9s6-4 6-8" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><circle cx="8" cy="32" r="3" fill="#fff"/><circle cx="19" cy="24" r="3" fill="#fff"/><circle cx="26" cy="15" r="3.4" fill="#fff"/></svg>';
+function cityTag(k){const c=S.cities[k];return c?'<span class="tag city" style="--c:'+c.c+'">'+(c.jp?esc(c.jp)+' ':'')+esc(c.n)+'</span>':''}
+const aiTag=src=>src==='ai'?'<span class="tag ai">Claude suggestion</span>':src==='osm'?'<span class="tag ai">Open data</span>':'';
+let toastT=null,toastFn=null;
+function toast(m,label,fn){const t=$('#toast');t.innerHTML=esc(m)+(label?' <button class="tbtn" data-act="toastact">'+esc(label)+'</button>':'');toastFn=fn||null;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>{t.hidden=true},label?6000:2600)}
+async function saveFile(name,data,mime){
+  if(DL){try{await DL.save({filename:name,data});toast('Saved '+name)}catch(e){if(!e||e.code!=='declined')toast('Could not save the file here. Use Copy instead.')}return}
+  if(IN_VIEWER){toast('Saving files is not available here. Use Copy instead.');return}
+  try{const u=URL.createObjectURL(new Blob([data],{type:mime||'text/plain'})),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),3000);toast('Saved '+name)}catch(e){toast('Could not save the file. Use Copy instead.')}
+}
+async function copyText(t,okMsg){
+  try{await navigator.clipboard.writeText(t);toast(okMsg||'Copied');return true}catch(e){openSheet({t:'text',text:t});return false}
+}
+const slug=s=>String(s||'trip').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'trip';
+
+
+function timeSel(val,attrs,label){
+  const m=hmMin(val),h=m==null?'':Math.floor(m/60),mi=m==null?'':m%60;
+  let ho='<option value="">--</option>',mo='<option value="">--</option>';
+  for(let i=0;i<24;i++)ho+='<option value="'+i+'"'+(h===i?' selected':'')+'>'+pad(i)+'</option>';
+  const mins=[];for(let i=0;i<60;i+=5)mins.push(i);if(mi!==''&&!mins.includes(mi)){mins.push(mi);mins.sort((a,b)=>a-b)}
+  mins.forEach(i=>{mo+='<option value="'+i+'"'+(mi===i?' selected':'')+'>'+pad(i)+'</option>'});
+  return '<span class="tm" role="group" aria-label="'+esc(label||'Time')+'"><select data-chg="tm" data-p="h" '+attrs+' aria-label="'+esc(label||'Time')+' hour">'+ho+'</select><b>:</b><select data-chg="tm" data-p="m" '+attrs+' aria-label="'+esc(label||'Time')+' minutes">'+mo+'</select></span>';
+}
+/* ================= header and navigation ================= */
+function hdrHtml(){
+  const f=S.out,today=f.from&&validTz(f.from.tz)?fromUtc(Date.now(),f.from.tz).date:localToday(),togo=diffD(today,S.out.date),n=nightList().length;
+  const route=(S.out.from?esc(S.out.from.city):'')+(S.out.to?' <span aria-hidden="true">→</span><span class="sr"> to </span> '+esc(S.out.to.city):'');
+  const pill=togo>0?'<span class="pill">'+togo+' day'+(togo>1?'s':'')+' to go</span>':togo===0?'<span class="pill">Flying today</span>':'';
+  return '<div class="hl"><div class="brand">'+LOGO+'<span>Waypoint</span></div><h1>'+esc(S.name)+'</h1>'+(route?'<p class="meta">'+route+'</p>':'')+
+   '<p class="meta num">'+fmtD(S.out.date,{day:'numeric',month:'short'})+' to '+fmtD(S.ret.date,{day:'numeric',month:'short',year:'numeric'})+' · '+n+' night'+(n===1?'':'s')+' · '+S.trav+' traveller'+(S.trav>1?'s':'')+'</p></div>'+
+   '<div class="side">'+pill+'<div class="btnrow"><button class="iconbtn" data-act="trips" aria-label="Your trips">'+ic('trips',1.8)+'</button><button class="iconbtn" data-act="settings" aria-label="Trip settings">'+ic('gear',1.8)+'</button></div></div>';
+}
+function navHtml(){
+  const t=[['trip','Trip'],['flights','Flights'],['stays','Stays'],['explore','Explore'],['guide','Guide']];
+  return '<div class="in">'+t.map(x=>'<button data-act="tab" data-v="'+x[0]+'"'+(U.tab===x[0]?' aria-current="page"':'')+'>'+ic(x[0])+'<span>'+x[1]+'</span></button>').join('')+'</div>';
+}
+
+/* ================= trip tab ================= */
+function glance(){
+  const days=tripDays();if(!days.length)return '';
+  const months=[],seen={};days.forEach(d=>{const k=d.slice(0,7);if(!seen[k]){seen[k]=1;months.push(k)}});
+  const today=localToday(),fo=flightCalc(S.out),nights=nightList(),dows=[0,1,2,3,4,5,6].map(i=>new Date(Date.UTC(2023,0,2+i)).toLocaleDateString(undefined,{weekday:'narrow',timeZone:'UTC'}));
+  return '<div class="card cal">'+months.map(k=>{
+    const y=+k.slice(0,4),m=+k.slice(5,7),first=Date.UTC(y,m-1,1),dim=new Date(Date.UTC(y,m,0)).getUTCDate(),lead=(new Date(first).getUTCDay()+6)%7;
+    let cells='';for(let i=0;i<lead;i++)cells+='<span class="c empty"></span>';
+    for(let d=1;d<=dim;d++){
+      const iso=k+'-'+pad(d),inTrip=days.includes(iso);let cls='c',style='';
+      if(inTrip){const st=baseStay(iso);
+        if(stayForNight(iso)||(iso===S.ret.date&&st)){cls+=' in';style=' style="--lc:'+cityColor(st.city)+'"'}
+        else if(nights.includes(iso))cls+=' vac';else cls+=' in'}
+      if(iso===today)cls+=' today';
+      const fl=inTrip&&(iso===S.out.date||iso===S.ret.date||iso===fo.landDate)?'<i class="fl"></i>':'';
+      cells+=inTrip?'<button class="'+cls+'"'+style+' data-act="goday" data-d="'+iso+'" aria-label="'+esc(fmtD(iso))+'">'+d+fl+'</button>':'<span class="'+cls+'">'+d+'</span>';
+    }
+    return '<div><h3>'+new Date(first).toLocaleDateString(undefined,{month:'long',year:'numeric',timeZone:'UTC'})+'</h3><div class="g">'+dows.map(x=>'<span class="dow">'+x+'</span>').join('')+cells+'</div></div>';
+  }).join('')+'<p class="note">Filled days have a stay. Dashed days still need one. A red dot marks a flight.</p></div>';
+}
+function flightChip(f,c,label){
+  if(!f.dep)return '<div class="fchip">'+ic('plane',1.8)+'<div><b class="disp">'+label+'</b><br><span>Flight not chosen yet</span></div></div>';
+  const t=f.dep+' '+(f.from?f.from.code:'')+(c.landTime?' → '+c.landTime+' '+f.to.code+(c.plus?' (+'+c.plus+' day'+(c.plus>1?'s':'')+')':''):'');
+  return '<div class="fchip">'+ic('plane',1.8)+'<div><b class="disp">'+label+'</b>'+(f.num?' <span class="sub">'+esc(f.num)+'</span>':'')+'<br><span class="num">'+esc(t)+'</span></div></div>';
+}
+function dayHtml(d,i,all){
+  const night=stayForNight(d),outStay=S.stays.find(s=>s.out===d),inStay=S.stays.find(s=>s.in===d);
+  const isLast=i===all.length-1,isFirst=i===0,vac=nightList().includes(d)&&!night;
+  const base=night||outStay,col=base?cityColor(base.city):null,fo=flightCalc(S.out),fr=flightCalc(S.ret);
+  let chips='',lines='';
+  if(d===S.out.date)chips+=flightChip(S.out,fo,'Flight out');
+  else if(fo.landDate===d&&fo.landTime)chips+='<div class="fchip">'+ic('plane',1.8)+'<div><b class="disp">Landing</b><br><span class="num">'+fo.landTime+' at '+esc(S.out.to.city)+'</span></div></div>';
+  if(d===S.ret.date)chips+=flightChip(S.ret,fr,'Flight home');
+  if(outStay)lines+='<p class="dline"><span class="tag">Check-out</span><span><b>'+esc(outStay.name)+'</b></span></p>';
+  if(night)lines+='<p class="dline">'+(inStay&&inStay.id===night.id?'<span class="tag ok">Check-in</span>':'<span class="tag">Night</span>')+'<span><b>'+esc(night.name)+'</b> '+cityTag(night.city)+'</span></p>';
+  if(vac){const run=vacantRuns().find(r=>r.from<=d&&d<=r.to);lines+='<div class="vacbox"><div><b class="disp">No stay for this night</b><br><span class="sub">Choose a hotel to fill it</span></div><button class="btn sm pri" data-act="pickstay" data-from="'+d+'" data-to="'+(run?addD(run.to,1):addD(d,1))+'">Pick a stay</button></div>'}
+  const items=planFor(d);let hrs=0,cost=0;
+  const itemsHtml=items.map(it=>{const inf=itemInfo(it);if(!inf)return '';hrs+=inf.h;cost+=inf.y||0;const idx=S.plan[d].indexOf(it);
+    return '<div class="item">'+timeSel(it.t||'','data-ch="itime" data-d="'+d+'" data-i="'+idx+'"','Start time for '+inf.n)+'<div class="t"><b>'+esc(inf.n)+'</b><span>'+(inf.h<1?Math.round(inf.h*60)+' min':(+inf.h.toFixed(2))+' h')+' · '+(inf.y?money(inf.y,S.dcur)+' each':inf.yu?'price not listed':'Free')+(it.auto?' · suggested':'')+'</span></div><button class="xbtn" data-act="rmitem" data-d="'+d+'" data-i="'+idx+'" aria-label="Remove '+esc(inf.n)+'">×</button></div>'}).join('');
+  const sum=items.length?'<span class="dsum num">'+(Math.round(hrs*10)/10)+' h planned'+(S.dcur?' · '+money(cost*S.trav,S.dcur)+' for '+S.trav:'')+(hrs>10?' · very full day':'')+'</span>':'<span class="dsum">Nothing planned yet</span>';
+  const canAuto=!items.length&&dayWindow(d)&&cityOfDay(d)&&allPlaces().some(p=>p.c===cityOfDay(d)&&hasPos(p));
+  return '<div class="day'+(isFirst?' first':'')+(isLast?' last':'')+(vac?' vac':'')+'" style="'+(col?'--lc:'+col:'')+'"><div class="spine"><span class="node"></span></div><section class="dcard" id="day-'+d+'">'+
+    '<div class="dh"><span class="d num">'+esc(fmtD(d,{weekday:'short',day:'numeric'}))+'</span><span class="m">'+esc(fmtD(d,{month:'short'}))+'</span>'+(night?cityTag(night.city):'')+'</div>'+chips+lines+itemsHtml+
+    '<div class="dfoot">'+sum+'<span class="dact">'+(canAuto?'<button class="btn sm" data-act="autoday" data-d="'+d+'">Suggest a day</button>':'')+'<button class="btn sm" data-act="addday" data-d="'+d+'">Add activity</button><button class="linkbtn" data-act="transititem" data-d="'+d+'">Add transit</button><button class="linkbtn" data-act="customitem" data-d="'+d+'">Your own</button></span></div></section></div>';
+}
+function budgetCard(){
+  const b=budget(),dc=S.dcur;
+  if(!dc)return '<div class="empty">Choose the destination currency in settings to see a spending estimate.</div>';
+  const row=(l,v)=>'<div class="row"><span>'+l+'</span><span class="num">'+money(v,dc)+'</span></div>';
+  const tot=b.total;
+  const totHtml=hasRate()&&S.hcur!==dc?(S.show==='home'?'<b class="num">'+money(tot/rateOf(),S.hcur)+'</b><br><span class="sub">about '+money(tot,dc)+'</span>':'<b class="num">'+money(tot,dc)+'</b><br><span class="sub">about '+money(tot/rateOf(),S.hcur)+'</span>'):'<b class="num">'+money(tot,dc)+'</b>';
+  return '<div class="card bud">'+row('Activities (planned)',b.act)+(S.food||S.trans?row('Food · '+money(S.food,dc)+' each a day',b.food)+row('Local transport · '+money(S.trans,dc)+' each a day',b.trans):'<div class="row"><span class="sub">Add daily food and transport amounts in settings</span><span></span></div>')+
+   row('Stays'+(b.stayEst?' (typical prices, edit on Stays)':''),b.stays)+(b.other?row('Other',b.other):'')+
+   '<div class="tot"><span>Estimate for '+S.trav+'</span><span style="text-align:right">'+totHtml+'</span></div>'+
+   '<p class="note" style="margin-top:8px">Flights are not included.'+(hasRate()&&S.hcur!==dc?' Rate used: 1 '+S.hcur+' = '+S.rate+' '+dc+'.'+(S.rateNote?' '+esc(S.rateNote):''):'')+'</p></div>';
+}
+function needsHtml(){
+  const nd=needs();
+  if(SAMPLE&&!S.pack&&!allPlaces().length&&!U.build)nd.push({t:'Get ideas for '+S.dest,d:'Claude suggests places and hotels you can edit',act:'build',b:'Ask Claude',ai:1});
+  if(!nd.length)return '<div class="okbox">Flights chosen and every night has a stay.</div>';
+  return '<div class="todo">'+nd.map(n=>'<div class="row"><div><b>'+esc(n.t)+'</b><span>'+esc(n.d)+'</span></div><button class="btn sm pri" data-act="'+n.act+'" data-v="'+(n.v||'')+'" data-from="'+(n.from||'')+'" data-to="'+(n.to||'')+'" data-sid="'+(n.sid||'')+'">'+n.b+'</button></div>').join('')+'</div>';
+}
+function buildCard(){
+  const b=U.build;if(!b)return '';
+  if(b.err)return '<div class="card prog" role="alert"><div><b class="disp">Could not finish suggestions</b><br><span class="sub">'+esc(b.err)+'</span></div><div class="btnrow"><button class="btn sm pri" data-act="build">Try again</button><button class="btn sm ghost" data-act="buildstop">Dismiss</button></div></div>';
+  return '<div class="card prog" role="status"><span class="spin" aria-hidden="true"></span><div><b class="disp">'+esc(b.text)+'</b><br><span class="sub">This can take a minute or two. You can keep planning.</span></div><button class="btn sm ghost" data-act="buildstop">Stop</button></div>';
+}
+function tripHtml(){
+  const days=tripDays();let plannedN=0;Object.keys(S.plan).forEach(d=>{plannedN+=(S.plan[d]||[]).length});
+  const open=emptyPlannable().length,hasAuto=Object.keys(S.plan).some(d=>(S.plan[d]||[]).some(i=>i.auto));
+  const banner=S.sample?'<div class="banner"><div><b class="disp">This is a sample trip.</b><br><span class="sub">Change anything, or start your own.</span></div><button class="btn sm pri" data-act="newtrip">Plan my own trip</button></div>':'';
+  const plan=open?'<div class="card cta"><div><b class="disp">'+open+' open day'+(open>1?'s':'')+' with nothing planned</b><br><span class="sub">Picks well-rated places close together and sets sensible start times. You can change anything afterwards.</span></div><button class="btn pri" data-act="autoplan">'+ic('spark',1.8)+' Plan my open days</button></div>':'';
+  const actions=[
+    '<button class="btn pri" data-act="copy">Copy itinerary</button>',
+    canSave()?'<button class="btn" data-act="savetxt">Save itinerary</button>':'',
+    !IN_VIEWER?'<button class="btn" data-act="saveics">Add to calendar</button>':'',
+    '<button class="btn" data-act="code">Copy trip code</button>',
+    canSave()?'<button class="btn" data-act="savejson">Back up trip</button>':''
+  ].join('');
+  return banner+buildCard()+'<div class="sec"><h2>To sort</h2></div>'+needsHtml()+plan+
+   '<div class="sec"><h2>Your dates</h2></div>'+glance()+
+   '<div class="sec"><h2>Day by day</h2><span class="sub">'+plannedN+' activit'+(plannedN===1?'y':'ies')+' planned'+(hasAuto?' · <button class="linkbtn" data-act="clearauto">Clear suggestions</button>':'')+'</span></div>'+
+   '<div class="rail">'+days.map((d,i)=>dayHtml(d,i,days)).join('')+'</div>'+
+   '<p class="note">Opening days and hours change, and some places close on Mondays. Check before you go.</p>'+
+   '<div class="sec"><h2>Spending estimate</h2>'+(S.hcur!==S.dcur&&S.dcur?'<div class="seg" role="group" aria-label="Show costs in"><button data-act="cur" data-v="dest" aria-pressed="'+(S.show!=='home')+'">'+esc(S.dcur)+'</button><button data-act="cur" data-v="home" aria-pressed="'+(S.show==='home')+'">'+esc(S.hcur)+'</button></div>':'')+'</div>'+budgetCard()+
+   '<div class="sec"><h2>Take it with you</h2></div><div class="card stack"><p>Send the plan to your travel partner or keep a copy. A trip code lets them open this exact plan under Your trips.</p><div class="btnrow wrapr">'+actions+'</div></div>';
+}
+
+/* ================= flights tab ================= */
+function tzList(){try{if(Intl.supportedValuesOf)return Intl.supportedValuesOf('timeZone')}catch(e){}return Array.from(new Set(AIRPORTS.map(a=>a.tz)))}
+function apSelect(key,cur,later){
+  const sel=cur?(AP[cur.code]&&AP[cur.code].city===cur.city?cur.code:'OTHER'):'';
+  return '<select data-chg="ap" data-k="'+key+'" aria-label="Airport">'+(later||!cur?'<option value=""'+(sel===''?' selected':'')+'>Choose…</option>':'')+AIRPORTS.map(a=>'<option value="'+a.code+'"'+(sel===a.code?' selected':'')+'>'+esc(a.city)+' ('+a.code+')</option>').join('')+'<option value="OTHER"'+(sel==='OTHER'?' selected':'')+'>Other airport…</option></select>'+
+   (sel==='OTHER'?'<div class="grid2" style="margin-top:8px"><input type="text" value="'+esc(cur.city)+'" placeholder="City or airport" data-chg="apc" data-k="'+key+'" data-f="city" aria-label="Custom airport name"><select data-chg="apc" data-k="'+key+'" data-f="tz" aria-label="Time zone">'+tzList().map(z=>'<option'+(z===cur.tz?' selected':'')+'>'+esc(z)+'</option>').join('')+'</select></div>':'');
+}
+function flightOpts(f){
+  const list=flightChoices(f);
+  return '<option value="">'+(list.length?'Choose a flight…':'No timetable here: choose to enter yours')+'</option>'+list.map(x=>{const tm=x.late&&f.date<x.lateUntil?x.late:x.dep;return '<option value="'+esc(x.id)+'"'+(f.fl===x.id?' selected':'')+'>'+esc(x.al)+' '+esc(x.id)+(tm?' · departs '+tm:'')+' · '+esc(x.days||'')+'</option>'}).join('')+'<option value="other"'+(f.fl==='other'?' selected':'')+'>Enter my own flight…</option>';
+}
+
+function alSelect(w,f){
+  const g=airlineGroups(f),all=[].concat(g.route,g.hubs);
+  const og=(l,a)=>a.length?'<optgroup label="'+l+'">'+a.map(n=>'<option'+(f.al===n&&!f.alo?' selected':'')+'>'+esc(n)+'</option>').join('')+'</optgroup>':'';
+  const extra=f.al&&!f.alo&&!all.includes(f.al)?'<option selected>'+esc(f.al)+'</option>':'';
+  return '<select data-chg="f" data-w="'+w+'" data-k="alsel"><option value="">Choose airline…</option>'+og('Flies this route or from these countries',g.route)+og('Other major airlines',g.hubs)+extra+'<option value="__other"'+(f.alo?' selected':'')+'>Type another airline…</option></select>';
+}
+const LAYS=[[45,'45 min'],[60,'1 h'],[90,'1 h 30'],[120,'2 h'],[180,'3 h'],[240,'4 h'],[360,'6 h'],[480,'8 h'],[720,'12 h'],[1440,'1 day']];
+function viaHtml(w,f){
+  const v=Array.isArray(f.via)?f.via:[],sp=stopPlan(f);
+  const rows=v.map((x,i)=>'<div class="viarow"><label class="f">Stopover '+(i+1)+'<select data-chg="via" data-w="'+w+'" data-i="'+i+'" data-k="code"><option value="">Choose airport…</option>'+apOptions(x.code)+'</select></label><label class="f">Wait<select data-chg="via" data-w="'+w+'" data-i="'+i+'" data-k="mins">'+LAYS.map(l=>'<option value="'+l[0]+'"'+(Math.round(num(x.mins,90))===l[0]?' selected':'')+'>'+l[1]+'</option>').join('')+'</select></label><button class="xbtn" data-act="rmvia" data-w="'+w+'" data-i="'+i+'" aria-label="Remove stopover">×</button></div>').join('');
+  const info=sp.length?'<div class="stopinfo">'+sp.map(s=>'<p><b>'+esc(s.ap.city)+'</b> · arrive '+s.arr.time+' ('+esc(fmtD(s.arr.date,{day:'numeric',month:'short'}))+'), leave '+s.dep.time+' local</p>').join('')+'</div>':'';
+  return '<div class="stack"><b class="disp" style="font-size:14px">Stopovers or connections</b>'+(rows||'<p class="note">Flying direct? Skip this. If you change planes, add each connecting airport.</p>')+info+(v.length<3?'<div><button class="btn sm" data-act="addvia" data-w="'+w+'">+ Add a stopover</button></div>':'')+'</div>';
+}
+function legHtml(w){
+  const f=S[w],c=flightCalc(f),isOut=w==='out',ready=f.from&&f.to;
+  const r=ready?flightChoices(f).find(x=>x.id===f.fl):null;let warn='';
+  if(r&&r.dow&&!r.dow.includes(new Date(isoMs(f.date)).getUTCDay()))warn+='<div class="warnbox">'+esc(r.id)+' normally flies '+esc(r.days)+'. Pick another date or confirm your booking.</div>';
+  if(r&&r.late&&f.date<r.lateUntil)warn+='<div class="warnbox">On '+esc(fmtD(f.date))+' this flight is timed '+r.late+' instead of '+r.dep+'.</div>';
+  if(r&&r.src==='ai')warn+='<div class="note">From Claude’s general knowledge, not a live timetable. Confirm the time on your ticket.</div>';
+  let land;
+  if(c.landTime){
+    land='<div class="land"><p class="sub">Lands at '+esc(f.to.city)+'</p><p class="big num">'+esc(fmtD(c.landDate))+' · '+c.landTime+(c.plus?' <span class="tag rose">+'+c.plus+' day'+(c.plus>1?'s':'')+'</span>':'')+'</p>'+
+     '<div class="row num"><span>Flight time <b>'+durTxt(c.mins)+'</b></span><span>Boarding <b>'+boardTime(f)+'</b></span><span>Be at the airport by <b>'+airportBy(f)+'</b></span></div>'+
+     '<p class="note" style="margin-top:8px">'+esc(tzDiffTxt(Object.assign({},f,c)))+'. '+esc(airportTip(f.to))+'</p>'+
+     '<p style="margin-top:8px"><a class="btn sm" target="_blank" rel="noopener" href="'+gcalLink((isOut?'Flight out ':'Flight home ')+(f.num||''),c.depUtc,c.arrUtc,'Boarding '+boardTime(f)+'. Lands '+fmtD(c.landDate)+' '+c.landTime+' local time.',f.from.city+' airport')+'">Add to Google Calendar</a></p></div>';
+  }else land='<div class="land"><p class="sub">'+(f.dep?'Add a landing time to see arrival details.':'Choose a flight, or enter your own times, to see landing details.')+'</p></div>';
+  const manual=ready&&(f.fl==='other'||!flightChoices(f).length);
+  const key=routeKey(f),asked=S.flightOpts[key]!==undefined,findBtn=SAMPLE&&ready&&!asked&&!(ROUTES[key]||[]).length;
+  return '<section class="card fl"><h2>'+(isOut?'Flying out':'Flying home')+'</h2><div class="stack" style="margin-top:12px">'+
+   '<label class="f">Date<input type="date" value="'+f.date+'" data-chg="f" data-w="'+w+'" data-k="date"></label>'+
+   '<div class="grid2"><div class="f"><span>From</span>'+apSelect(w+'.from',f.from,!isOut&&false)+'</div><div class="f"><span>To</span>'+apSelect(w+'.to',f.to,true)+'</div></div>'+
+   (ready?'<label class="f">Flight<select data-chg="f" data-w="'+w+'" data-k="fl">'+flightOpts(f)+'</select></label>':'<p class="note">Choose both airports to see flights.</p>')+
+   (findBtn?'<div><button class="btn sm" data-act="findflights" data-w="'+w+'"'+(U.busy['ff'+w]?' disabled':'')+'>'+ic('spark',1.8)+' '+(U.busy['ff'+w]?'Asking Claude…':'Find flights with Claude')+'</button></div>':'')+
+   (asked&&!(S.flightOpts[key]||[]).length&&!(ROUTES[key]||[]).length?'<p class="note">Claude could not name flights for this route. Enter your times below.</p>':'')+warn+
+   (manual?'<div class="grid2"><label class="f">Airline'+alSelect(w,f)+'</label><label class="f">Flight number<input type="text" value="'+esc(f.num)+'" data-chg="f" data-w="'+w+'" data-k="num" placeholder="e.g. TR12" maxlength="8"></label></div>'+(f.alo?'<label class="f">Airline name<input type="text" value="'+esc(f.al)+'" data-chg="f" data-w="'+w+'" data-k="al" placeholder="Airline name" maxlength="40"></label>':''):'')+
+   '<div class="grid3"><div class="f"><span>Departs</span>'+timeSel(f.dep,'data-ch="f" data-w="'+w+'" data-k="dep"','Departure time')+'</div><div class="f"><span>Boarding</span>'+timeSel(f.board||boardTime(f),'data-ch="f" data-w="'+w+'" data-k="board"','Boarding time')+'</div><div class="f"><span>Lands (local)</span>'+timeSel(f.arr||c.landTime||'','data-ch="f" data-w="'+w+'" data-k="arr"','Landing time')+'</div></div>'+
+   viaHtml(w,f)+'<p class="note">Boarding defaults to 45 minutes before departure. Landing is estimated from the usual flight time; change it to match your ticket.</p></div>'+land+'</section>';
+}
+function flightsHtml(){
+  return '<div class="sec"><h2>Flights</h2></div>'+legHtml('out')+legHtml('ret')+
+   '<p class="note" style="margin-top:12px">Times come from published schedules or Claude’s general knowledge. Airlines retime flights often, so check them against your booking. All times are local to each airport.</p>';
+}
+function applyFlightPick(f,id){
+  const r=flightChoices(f).find(x=>x.id===id);
+  f.fl=id;f.board='';f.arr='';
+  if(!id||id==='other'){f.dep='';f.dur=0;f.al='';f.num='';return}
+  if(r){f.al=r.al;f.num=r.id;const late=r.late&&f.date<r.lateUntil;f.dep=late?r.late:r.dep;f.dur=late?r.lateDur:r.dur}
+}
+
+/* ================= stays tab ================= */
+function nearbyFor(st,n){return allPlaces().filter(p=>p.c===st.city&&p.s>=4.4&&hasPos(p)).map(p=>({p,d:km(st,p)})).sort((a,b)=>a.d-b.d).slice(0,n)}
+function staysHtml(){
+  const list=S.stays.slice().sort((a,b)=>a.in<b.in?-1:1),runs=vacantRuns();
+  const cards=list.map(s=>{
+    const n=diffD(s.in,s.out),near=nearbyFor(s,4),h=s.hid?hotelById(s.hid):null;
+    return '<article class="card stay" style="--c:'+cityColor(s.city)+'"><div class="chips2">'+cityTag(s.city)+(s.area?'<span class="tag">'+esc(s.area)+'</span>':'')+(h?aiTag(h.src):'')+'</div><h3>'+esc(s.name)+'</h3>'+
+     '<p class="num"><b class="disp">'+esc(fmtD(s.in))+' → '+esc(fmtD(s.out))+'</b> <span class="sub">'+(n>0?n+' night'+(n>1?'s':''):'check dates')+'</span></p>'+
+     (h&&h.t?'<p class="sub">'+esc(h.t)+'</p>':'')+
+     '<label class="f" style="max-width:260px">Price per night ('+esc(S.dcur||'local')+', optional)<input type="number" inputmode="numeric" min="0" step="any" value="'+(s.rate||'')+'" placeholder="'+(s.p?'Typical '+Math.round(s.p):'')+'" data-chg="rate" data-sid="'+s.id+'"></label>'+
+     (near.length?'<div><p class="sub" style="margin-bottom:6px">Close to this stay</p><div class="nearrow">'+near.map(x=>'<span class="near"><b class="disp">'+esc(x.p.n)+'</b> · '+x.p.s.toFixed(1)+(distTxt(x.d)?' · '+distTxt(x.d):'')+'</span>').join('')+'</div></div>':'')+
+     '<div class="btnrow wrapr"><button class="btn sm" data-act="editstay" data-sid="'+s.id+'">Edit dates</button><button class="btn sm ghost" data-act="near" data-sid="'+s.id+'">Explore nearby</button><a class="btn sm ghost" target="_blank" rel="noopener" href="'+mapsLink(s.name+' '+cityName(s.city))+'">Open in Maps</a><a class="btn sm ghost" target="_blank" rel="noopener" href="'+gcalDays(s.name,s.in,s.out,s.name)+'">Add to calendar</a></div></article>';
+  }).join('');
+  const vac=runs.map(r=>'<div class="vacbox" style="margin-bottom:10px"><div><b class="disp">'+r.n+' night'+(r.n>1?'s':'')+' open</b><br><span class="sub num">'+esc(fmtD(r.from))+' to '+esc(fmtD(addD(r.to,1)))+'</span></div><button class="btn sm pri" data-act="pickstay" data-from="'+r.from+'" data-to="'+addD(r.to,1)+'">Pick a stay</button></div>').join('');
+  return '<div class="sec"><h2>Stays</h2><button class="btn pri sm" data-act="pickstay" data-from="" data-to="">Add a stay</button></div>'+vac+(cards||'<div class="empty">No stays yet. Add one from the list or the map, then set your check-in and check-out dates.</div>');
+}
+
+/* ================= explore tab ================= */
+function refStay(){
+  if(U.ref){const r=S.stays.find(s=>s.id===U.ref);if(r)return r}
+  if(U.target){const t=baseStay(U.target);if(t)return t}
+  return S.stays[0]||null;
+}
+function filtered(){
+  const ref=refStay();
+  const l=allPlaces().filter(s=>{
+    if(U.city!=='all'&&s.c!==U.city)return false;
+    if(U.cat==='must')return s.s>=4.7;
+    if(U.cat!=='all')return s.k===U.cat;
+    return true}).map(s=>({s,d:ref?km(ref,s):9999}));
+  if(U.sort==='near')l.sort((a,b)=>a.d-b.d);
+  else if(U.sort==='cheap')l.sort((a,b)=>a.s.y-b.s.y||b.s.s-a.s.s);
+  else l.sort((a,b)=>b.s.s-a.s.s||a.d-b.d);
+  return l;
+}
+function hTxt(s){const f=h=>h<1?Math.round(h*60)+' min':(+h.toFixed(2))+' h';return s.h1===s.h2?f(s.h1):(s.h1<1?f(s.h1):String(+s.h1.toFixed(2)))+' to '+f(s.h2)}
+function badgeLn(ln){return ln&&JP.LN[ln]?'<span class="ln" style="--lc:'+JP.LN[ln]+'">'+esc(ln)+'</span>':''}
+function spotCard(x){
+  const s=x.s,dt=distTxt(x.d);
+  return '<article class="spot"><div class="top"><span class="tier '+tierCls(s.s)+'">'+tierOf(s.s)+'</span><span class="score num">'+s.s.toFixed(1)+' of 5</span>'+cityTag(s.c)+aiTag(s.src)+'</div><h3>'+esc(s.n)+'</h3>'+
+   '<p class="where">'+(s.st?badgeLn(s.ln)+'<span>'+esc(s.st)+'</span>·':'')+(s.a?'<span>'+esc(s.a)+'</span>':'')+(dt?(s.a?'·':'')+'<span>'+dt+(refStay()?' from your stay':'')+'</span>':'')+'</p>'+
+   (s.t?'<p class="tip">'+esc(s.t)+'</p>':'')+
+   '<div class="meta"><span>'+ic('clock')+hTxt(s)+'</span><span>'+ic('yen')+(s.y?both(s.y)+(s.yl?' <span class="sub">'+esc(s.yl)+'</span>':' <span class="sub">per person</span>'):(s.yu?'<span class="sub">Price not listed. Check locally.</span>':'<span class="yen">Free</span>'))+'</span></div>'+
+   '<div class="act"><button class="btn sm pri" data-act="add" data-id="'+esc(s.id)+'">'+(U.target?'Add to '+esc(fmtD(U.target,{weekday:'short',day:'numeric',month:'short'})):'Add to a day')+'</button><a class="btn sm ghost" target="_blank" rel="noopener" href="'+placeLink(s)+'">Open in Maps</a></div></article>';
+}
+function exploreHtml(){
+  const cities=[['all','All']].concat(cityKeys().map(k=>[k,cityName(k)]));
+  const cats=[['all','Everything'],['must','Must-do'],['food','Food'],['view','Views'],['sight','Sights'],['culture','Culture'],['nature','Nature'],['fun','Fun']];
+  const l=filtered(),ref=refStay();
+  const tgt=U.target?'<div class="target"><span><b class="disp">Adding to '+esc(fmtD(U.target))+'</b></span><button class="btn sm" data-act="cleartarget">Done</button></div>':'';
+  const sorts='<div class="seg" role="group" aria-label="Sort"><button data-act="sort" data-v="top" aria-pressed="'+(U.sort==='top')+'">Top rated</button><button data-act="sort" data-v="near" aria-pressed="'+(U.sort==='near')+'">Near my stay</button><button data-act="sort" data-v="cheap" aria-pressed="'+(U.sort==='cheap')+'">Cheapest</button></div>';
+  const view='<div class="seg" role="group" aria-label="View"><button data-act="view" data-v="list" aria-pressed="'+(U.view==='list')+'">List</button><button data-act="view" data-v="map" aria-pressed="'+(U.view==='map')+'">Map</button></div>';
+  let body;
+  if(U.view==='map'){
+    const mc=U.city!=='all'?U.city:(cityKeys().find(k=>allPlaces().some(p=>p.c===k&&hasPos(p)))||cityKeys()[0]);
+    const pts=allPlaces().filter(s=>s.c===mc&&hasPos(s)&&(U.cat==='all'||(U.cat==='must'?s.s>=4.7:s.k===U.cat))).map(s=>({id:'s:'+s.id,lat:s.lat,lon:s.lon,type:'spot',s:s.s,n:s.n}));
+    S.stays.filter(s=>s.city===mc&&hasPos(s)).forEach(s=>pts.push({id:'h:'+s.id,lat:s.lat,lon:s.lon,type:'stay',n:s.name}));
+    const sel=U.sel&&U.sel.indexOf('s:')===0?placeById(U.sel.slice(2)):null;
+    body='<div class="mapbox">'+mapSvg(pts,U.sel)+'<div class="legend"><span><i style="background:var(--rose)"></i>Must-do</span><span><i style="background:var(--ink)"></i>Great</span><span><i style="background:var(--mut)"></i>Good</span><span><i class="sq"></i>Your stay</span></div></div>'+
+      (sel?spotCard({s:sel,d:ref?km(ref,sel):9999}):'<p class="note">Tap a pin to see the place. This is a simple sketch of the area, not a street map. Use Open in Maps for streets and directions.</p>')+(U.city==='all'&&cityKeys().length>1?'<p class="note" style="margin-top:8px">Showing '+esc(cityName(mc))+'. Pick a city above to see another.</p>':'');
+  }else if(l.length)body=l.map(spotCard).join('');
+  else if(!allPlaces().length)body='<div class="empty"><p><b class="disp">No places yet</b></p><p style="margin:6px 0 12px">'+(SAMPLE?'Ask Claude for well-known places, with ratings, time needed and costs, or add your own.':'Add the places you want to visit. Open this page in Claude to get suggestions as well.')+'</p><div class="btnrow wrapr" style="justify-content:center">'+(SAMPLE?'<button class="btn pri" data-act="more">'+ic('spark',1.8)+' Find places with Claude</button>':'')+'<button class="btn" data-act="ownplace">Add your own</button></div></div>';
+  else body='<div class="empty">Nothing matches. Try another city or category.</div>';
+  return '<div class="sec"><h2>Explore</h2>'+view+'</div>'+tgt+
+   '<div class="chips" role="group" aria-label="City">'+(cities.length>2?cities.map(c=>'<button class="chip" data-act="city" data-v="'+esc(c[0])+'" aria-pressed="'+(U.city===c[0])+'">'+esc(c[1])+'</button>').join(''):'')+'<button class="chip add" data-act="addcity">+ Add city</button></div>'+
+   '<div class="chips" role="group" aria-label="Category">'+cats.map(c=>'<button class="chip" data-act="cat" data-v="'+c[0]+'" aria-pressed="'+(U.cat===c[0])+'">'+c[1]+'</button>').join('')+'</div>'+
+   (U.view==='list'&&allPlaces().length?'<div class="sortrow">'+sorts+'<span class="sub">'+(ref&&U.sort==='near'?'From '+esc(ref.name):l.length+' places')+'</span></div>':'')+body+
+   (allPlaces().length?'<div class="btnrow wrapr" style="margin-top:14px">'+(SAMPLE?'<button class="btn sm" data-act="more">'+ic('spark',1.8)+' Find more with Claude</button>':'')+'<button class="btn sm ghost" data-act="ownplace">Add your own place</button></div>':'')+
+   '<p class="note" style="margin-top:14px">'+(S.pack==='japan'?'Scores are our own, out of 5, based on what travellers commonly report. ':'Scores are estimates out of 5 based on how places are generally rated. ')+'They are not live review scores. Costs are per person and indicative. Confirm prices and opening days before you go.</p>';
+}
+
+/* simple area sketch: no map tiles, but real relative positions and a scale bar */
+function mapSvg(pts,selId){
+  const W=360,Hh=330,pd=28;
+  if(!pts.length)return '<svg viewBox="0 0 '+W+' '+Hh+'" role="img" aria-label="No places to show"><rect width="'+W+'" height="'+Hh+'" style="fill:var(--soft)"/><text x="'+W/2+'" y="'+Hh/2+'" text-anchor="middle" font-size="13" style="fill:var(--mut)">Nothing to show on the map yet</text></svg>';
+  const la=pts.map(p=>p.lat),lo=pts.map(p=>p.lon),latMin=Math.min.apply(null,la),latMax=Math.max.apply(null,la),lonMin=Math.min.apply(null,lo),lonMax=Math.max.apply(null,lo);
+  const cLat=(latMin+latMax)/2,cLon=(lonMin+lonMax)/2,kx=Math.cos(cLat*Math.PI/180);
+  const spanY=Math.max(latMax-latMin,0.02),spanX=Math.max((lonMax-lonMin)*kx,0.03),sc=Math.min((W-2*pd)/spanX,(Hh-2*pd-16)/spanY);
+  const X=lon=>W/2+(lon-cLon)*kx*sc,Y=lat=>Hh/2-8-(lat-cLat)*sc,pxKm=sc/111.2;
+  let g='<rect width="'+W+'" height="'+Hh+'" style="fill:var(--soft)"/>';
+  for(let x=20;x<W;x+=40)g+='<line x1="'+x+'" y1="0" x2="'+x+'" y2="'+Hh+'" style="stroke:var(--line);stroke-width:1;stroke-dasharray:2 5"/>';
+  for(let y=20;y<Hh;y+=40)g+='<line x1="0" y1="'+y+'" x2="'+W+'" y2="'+y+'" style="stroke:var(--line);stroke-width:1;stroke-dasharray:2 5"/>';
+  const nice=[0.2,0.5,1,2,5,10,20,50,100,200,500].filter(k=>k*pxKm<=W*0.32).pop()||0.2;
+  g+='<g transform="translate(14 '+(Hh-14)+')"><line x2="'+(nice*pxKm).toFixed(1)+'" style="stroke:var(--ink);stroke-width:2.5;stroke-linecap:round"/><text y="-7" font-size="11" style="fill:var(--ink);font-family:var(--f-disp);font-weight:700">'+nice+' km</text></g>';
+  pts.slice().sort((a,b)=>(a.id===selId)-(b.id===selId)).forEach(p=>{
+    const x=X(p.lon),y=Y(p.lat),sel=p.id===selId;
+    const clr=p.type==='spot'?(p.s>=4.7?'var(--rose)':p.s>=4.5?'var(--ink)':'var(--mut)'):'var(--card)';
+    const shape=p.type==='spot'?'<circle r="'+(sel?10:7.5)+'" style="fill:'+clr+';stroke:var(--card);stroke-width:2"/>':'<rect x="-8" y="-8" width="16" height="16" rx="4" style="fill:var(--card);stroke:var(--ink);stroke-width:2.5"/><circle r="3" style="fill:var(--ink)"/>';
+    const nm=p.n.length>26?p.n.slice(0,25)+'…':p.n;
+    g+='<g transform="translate('+x.toFixed(1)+' '+y.toFixed(1)+')" data-act="pin" data-id="'+esc(p.id)+'" style="cursor:pointer" role="button" tabindex="0" aria-label="'+esc(p.n)+'">'+(sel?'<circle r="16" style="fill:none;stroke:var(--rose);stroke-width:3"/>':'')+'<circle r="18" style="fill:transparent"/>'+shape+(sel?'<text y="-22" text-anchor="middle" font-size="11" style="fill:var(--ink);font-family:var(--f-disp);font-weight:700;stroke:var(--card);stroke-width:4;paint-order:stroke">'+esc(nm)+'</text>':'')+'</g>';
+  });
+  return '<svg viewBox="0 0 '+W+' '+Hh+'" role="group" aria-label="Sketch map of the area">'+g+'</svg>';
+}
+
+/* ================= guide tab ================= */
+function japanGuide(){
+  const au=S.out.from&&S.out.from.cc==='AU';
+  const L=(t,items)=>'<details class="g"><summary>'+t+'</summary><div class="body"><ul>'+items.map(i=>'<li>'+i+'</li>').join('')+'</ul></div></details>';
+  return L('Before you land',[au?'Australian passport holders can visit Japan for tourism for up to 90 days without a visa. Your passport must stay valid for the whole trip.':'Many nationalities can visit Japan visa-free for short tourist stays. Check the rule for your passport on the Japanese embassy website.','Register on Visit Japan Web for immigration and customs. Finish it at least 6 hours before you land so the QR codes are active.','Have your first night’s hotel address and your onward ticket ready.','<a target="_blank" rel="noopener" href="https://www.vjw-lp.digital.go.jp/en/">Visit Japan Web</a>'])+
+   L('Tax-free shopping changes on 1 November 2026',['Tourists are refunded consumption tax (10%, or 8% on food) on purchases of ¥5,000 or more at one shop in one day.','From 1 November 2026 you pay the tax-inclusive price in the shop and claim the refund when you leave Japan. You complete a departure procedure at a customs terminal, or on Visit Japan Web, before check-in.','The items must be with you when you leave, and consumables cannot be used before departure. Keep your receipts together.','Your flight home is on '+esc(fmtD(S.ret.date,{day:'numeric',month:'long'}))+'. Ask each shop which system applies to your receipt.'])+
+   L('Getting around',['An IC card (Suica or PASMO) pays for trains, buses and many shops. On an iPhone, add Mobile Suica to Apple Wallet. There is no deposit and the balance does not expire.','Without an iPhone, Welcome Suica works for 28 days with no deposit. It is sold at Haneda, Narita and major stations and you need your passport. Any balance left at the end is not refundable.','The top-up limit is ¥20,000. Station machines and convenience stores take cash. Mobile Suica tops up by card.','Most Tokyo lines stop running around midnight to 1 am. Phone calls on trains are frowned on.'])+
+   L('Money',['Cards are widely accepted, but small restaurants, shrines and some markets still prefer cash. Carry ¥10,000 to ¥20,000 a day.','Convenience-store ATMs (7-Eleven, Lawson) accept most overseas cards.','Tipping is not expected.'])+
+   L('Leaving Japan',['The international tourist tax is ¥3,000 a person for departures from 1 July 2026. Airlines normally include it in the ticket price, so you should not need to pay at the airport.','Aim to be at the airport about 3 hours before an international flight.'])+
+   L('Weather and autumn colour',['Late October to early November is mild by day and cool at night. Bring layers and a light rain jacket.','The official forecast puts peak autumn colour in Tokyo around 28 November and in Osaka around 1 December, so early November is before the peak. Higher ground such as Nikko changes earlier.'])+
+   L('Everyday tips',['Power is 100 V with two-pin Type A plugs. Bring an adapter. Most phone and laptop chargers cope with 100 V.','Rubbish bins are rare. Carry a small bag for your rubbish.','Emergency numbers: 110 for police, 119 for fire and ambulance.','Many temples and onsen ask you to remove shoes.'])+
+   '<div class="srcs"><span>Sources</span><a target="_blank" rel="noopener" href="https://www.flightsfrom.com/SYD-HND">Sydney to Haneda schedules</a><a target="_blank" rel="noopener" href="https://www.japan-guide.com/news/tax-free-shopping.html">Japan Guide: tax-free shopping from November 2026</a><a target="_blank" rel="noopener" href="https://goasia.cc/en/news/japan-departure-tax-increase-2026">Japan departure tax increase</a><a target="_blank" rel="noopener" href="https://www.jrpass.com/blog/suica-vs-pasmo-which-ic-card-should-tourists-use-in-japan-in-2026?c=AUD">Suica and PASMO for tourists</a><a target="_blank" rel="noopener" href="https://www.japan.travel/en/see-and-do/autumn-leaves-forecast/">JNTO autumn leaves forecast</a><span>Exchange rate used: A$1 = ¥109.9, mid-market on 16 October 2026. Your bank’s rate will differ.</span></div>';
+}
+function aiGuide(){
+  const titles={entry:'Entry and documents',money:'Money',transport:'Getting around',culture:'Local customs',safety:'Staying safe',weather:'Weather for your dates',power:'Power and plugs'};
+  if(!S.guide)return '<div class="empty"><p>Practical tips for '+esc(S.dest)+' appear here.</p>'+(SAMPLE?'<p style="margin-top:10px"><button class="btn pri" data-act="build">'+ic('spark',1.8)+' Ask Claude</button></p>':'<p class="note" style="margin-top:6px">Open this page in Claude to generate them.</p>')+'</div>';
+  const keys=Object.keys(titles).filter(k=>S.guide[k]&&S.guide[k].length);
+  return '<p class="note" style="margin-bottom:10px">From Claude’s general knowledge, not live sources. Rules and prices change, so check official sources before you travel.</p>'+keys.map((k,i)=>'<details class="g"'+(i===0?' open':'')+'><summary>'+titles[k]+'</summary><div class="body"><ul>'+S.guide[k].map(t=>'<li>'+esc(t)+'</li>').join('')+'</ul></div></details>').join('');
+}
+function packItems(){
+  const n=Math.max(1,nightList().length),t=Math.min(n,7)+1;
+  return [['pk1','Tops × '+t],['pk2','Underwear and socks × '+t],['pk3','Trousers, shorts or skirts × '+(Math.ceil(Math.min(n,7)/3)+1)],['pk4','Light layer and a rain jacket'],['pk5','Comfortable walking shoes'],['pk6','Toiletries and any medicines'],['pk7','Phone charger, power bank, plug adapter'],['pk8','Reusable water bottle and a small day bag'],['pk9','Sunscreen and sunglasses or a hat']];
+}
+function checklistHtml(){
+  const groups=[];CHECKS.forEach(c=>{let g=groups.find(x=>x[0]===c[1]);if(!g){g=[c[1],[]];groups.push(g)}g[1].push(c)});
+  const row=(id,label)=>'<label class="chk"><input type="checkbox" data-chg="chk" data-id="'+id+'"'+(S.check[id]?' checked':'')+'><span>'+esc(label)+'</span></label>';
+  const done=CHECKS.filter(c=>S.check[c[0]]).length;
+  const gov=S.out.from&&GOV[S.out.from.cc]?'<a target="_blank" rel="noopener" href="'+GOV[S.out.from.cc][1]+'">'+esc(GOV[S.out.from.cc][0])+'</a>':'';
+  return '<div class="sec"><h2>Before you go</h2><span class="sub">'+done+' of '+CHECKS.length+' done</span></div><div class="card">'+groups.map(g=>'<p class="gh">'+esc(g[0])+'</p>'+g[1].map(c=>row(c[0],c[2])).join('')).join('')+(gov?'<p class="note" style="margin-top:10px">Official travel advice for your passport country: '+gov+'</p>':'')+'</div>'+
+   '<div class="sec"><h2>Packing</h2><span class="sub">for '+Math.max(1,nightList().length)+' nights</span></div><div class="card">'+packItems().map(p=>row(p[0],p[1])).join('')+'<p class="note" style="margin-top:10px">Most places have laundry, so pack for about a week even on a long trip.</p></div>';
+}
+function guideHtml(){
+  return checklistHtml()+'<div class="sec"><h2>About '+esc(S.dest)+'</h2></div>'+(S.pack==='japan'?japanGuide():aiGuide());
+}
+
+/* ================= sheets ================= */
+function openSheet(s){U.sheet=s;renderSheet();const d=$('#sheet .sheet');if(d)d.focus()}
+function closeSheet(){U.sheet=null;renderSheet()}
+function renderSheet(){
+  const el=$('#sheet'),s=U.sheet;
+  if(!s){el.innerHTML='';document.documentElement.style.overflow='';return}
+  document.documentElement.style.overflow='hidden';
+  const fn={settings:settingsSheet,day:daySheet,picker:pickerSheet,stay:staySheet,ownhotel:ownHotelSheet,custom:customSheet,text:textSheet,trips:tripsSheet,setup:setupSheet,importer:importSheet,more:moreSheet,ownplace:ownPlaceSheet,addcity:addCitySheet}[s.t];
+  el.innerHTML='<div class="scrim" data-act="close"></div><div class="sheet" role="dialog" aria-modal="true" tabindex="-1"><div class="in"><div class="grab"></div>'+(fn?fn():'')+'</div></div>';
+}
+const head=t=>'<div class="head"><h2>'+t+'</h2><button class="btn sm ghost" data-act="close">Close</button></div>';
+function curOpts(sel,blank){
+  let nm=null;try{nm=new Intl.DisplayNames(undefined,{type:'currency'})}catch(e){}
+  const list=!sel||CURRENCIES.includes(sel)?CURRENCIES:CURRENCIES.concat([sel]);
+  const nameOf=c=>{try{return nm?nm.of(c)||'':''}catch(e){return ''}};
+  return (blank?'<option value="">'+blank+'</option>':'')+list.map(c=>'<option value="'+c+'"'+(c===sel?' selected':'')+'>'+c+(nameOf(c)?' · '+esc(nameOf(c)):'')+'</option>').join('');
+}
+const apOptions=sel=>AIRPORTS.map(a=>'<option value="'+a.code+'"'+(a.code===sel?' selected':'')+'>'+esc(a.city)+' ('+a.code+')</option>').join('');
+const cityOptions=sel=>cityKeys().map(k=>'<option value="'+esc(k)+'"'+(k===sel?' selected':'')+'>'+esc(cityName(k))+'</option>').join('');
+
+function settingsSheet(){
+  const diff=S.hcur!==S.dcur;
+  return head('Trip settings')+'<div class="stack">'+
+   '<label class="f">Trip name<input id="set-name" type="text" maxlength="60" value="'+esc(S.name)+'" data-chg="set" data-k="name"></label>'+
+   '<label class="f">Travellers<input id="set-trav" type="number" min="1" max="12" value="'+S.trav+'" data-chg="set" data-k="trav"></label>'+
+   '<div class="grid2"><label class="f">Your currency<select id="set-hcur" data-chg="set" data-k="hcur">'+curOpts(S.hcur)+'</select></label><label class="f">Destination currency<select id="set-dcur" data-chg="set" data-k="dcur">'+curOpts(S.dcur,'Choose…')+'</select></label></div>'+
+   (diff&&S.dcur?'<label class="f">'+esc(S.dcur)+' per 1 '+esc(S.hcur)+'<input id="set-rate" type="number" min="0" step="any" value="'+(num(S.rate)>0?S.rate:'')+'" placeholder="Enter today’s rate" data-chg="set" data-k="rate"></label><p class="note">'+(S.rateNote?esc(S.rateNote)+' ':'')+'Cards and exchange counters usually give a little less than the mid-market rate.</p>':'')+
+   '<label class="f">Food per person per day ('+esc(S.dcur||'local')+')<input id="set-food" type="number" min="0" step="any" value="'+(S.food||'')+'" data-chg="set" data-k="food"></label>'+
+   '<label class="f">Local transport per person per day ('+esc(S.dcur||'local')+')<input id="set-trans" type="number" min="0" step="any" value="'+(S.trans||'')+'" data-chg="set" data-k="trans"></label>'+
+   '<label class="f">Other costs for the whole trip ('+esc(S.dcur||'local')+')<input id="set-other" type="number" min="0" step="any" value="'+(S.other||'')+'" data-chg="set" data-k="other"></label>'+
+   '<div class="card" style="box-shadow:none"><div class="btnrow wrapr"><button class="btn" data-act="newtrip">Plan a new trip</button>'+(U.sheet.del?'<button class="btn pri" data-act="deltrip2">Yes, delete this trip</button>':'<button class="btn ghost" data-act="deltrip1">Delete this trip</button>')+'</div></div></div>';
+}
+function daySheet(){
+  return head('Add to which day?')+'<div class="daypick">'+tripDays().map(d=>{const n=(S.plan[d]||[]).length;return '<button data-act="pickday" data-d="'+d+'"><span>'+esc(fmtD(d,{weekday:'long',day:'numeric',month:'long'}))+'</span><span class="sub">'+(n?n+' planned':'free')+'</span></button>'}).join('')+'</div>';
+}
+function hotelListHtml(){
+  const s=U.sheet,q=(s.q||'').toLowerCase();
+  const l=allHotels().filter(h=>(s.city==='all'||h.c===s.city)&&(!q||(h.n+' '+h.a).toLowerCase().includes(q)));
+  const qq=(s.q||'').trim(),quick=qq?'<button class="hotel quick" data-act="ownhotel" data-name="'+esc(qq)+'"><b>Use “'+esc(qq)+'” as my hotel</b><span class="s">Not in the list? Add it by name and pick the area.</span></button>'+'<button class="hotel quick" data-act="hotelsearch" data-name="'+esc(qq)+'"'+(U.busy.look?' disabled':'')+'><b>'+(U.busy.look?'Searching…':'Search the map for “'+esc(qq)+'” (free)')+'</b><span class="s">Finds the exact hotel anywhere in the world.</span></button>'+(SAMPLE?'<button class="hotel quick" data-act="lookuphotel" data-name="'+esc(qq)+'"'+(U.busy.look?' disabled':'')+'><b>'+(U.busy.look?'Asking Claude…':'Find “'+esc(qq)+'” with Claude')+'</b><span class="s">Claude fills in the city and area from its own knowledge.</span></button>':''):'';
+  const hr=(s.hres||[]).map((r,i)=>'<button class="hotel" data-act="hotelfound" data-i="'+i+'"><b>'+esc(r.name)+'</b><span class="s">'+esc(r.full)+'</span></button>').join('');
+  l.sort((a,b)=>cityKeys().indexOf(a.c)-cityKeys().indexOf(b.c)||a.n.localeCompare(b.n));
+  if(!l.length)return hr+'<div class="empty">'+(allHotels().length?'No hotels match.':'No hotels listed yet.')+'</div>'+quick;
+  return hr+quick+l.map(h=>{
+    const near=allPlaces().filter(x=>x.c===h.c&&hasPos(x)&&hasPos(h)).map(x=>({x,d:km(h,x)})).sort((a,b)=>a.d-b.d).slice(0,2);
+    return '<button class="hotel" data-act="hpick" data-id="'+esc(h.id)+'"><b>'+esc(h.n)+'</b><span class="s">'+esc(cityName(h.c))+(h.a?' · '+esc(h.a):'')+(h.p?' · about '+money(h.p,S.dcur||S.hcur)+' a night':'')+'</span>'+(h.t?'<span class="s">'+esc(h.t)+'</span>':'')+(near.length?'<span class="s">Near: '+near.map(n=>esc(n.x.n)+' ('+(distTxt(n.d)||'')+')').join(', ')+'</span>':'')+(h.src==='ai'?'<span class="s"><span class="tag ai">Claude suggestion</span></span>':'')+'</button>';
+  }).join('');
+}
+function pickerSheet(){
+  const s=U.sheet,cities=[['all','All']].concat(cityKeys().map(k=>[k,cityName(k)]));
+  let body;
+  if(s.view==='map'){
+    const mc=s.city!=='all'?s.city:(cityKeys().find(k=>allHotels().some(h=>h.c===k&&hasPos(h)))||cityKeys()[0]);
+    const pts=allHotels().filter(h=>h.c===mc&&hasPos(h)).map(h=>({id:'h:'+h.id,lat:h.lat,lon:h.lon,type:'stay',n:h.n})),sel=s.sel?hotelById(s.sel):null;
+    body='<div class="mapbox">'+mapSvg(pts,s.sel?'h:'+s.sel:null)+'</div>'+(sel?'<button class="hotel" data-act="hpick" data-id="'+esc(sel.id)+'"><b>'+esc(sel.n)+'</b><span class="s">'+esc(sel.a||'')+(sel.p?' · about '+money(sel.p,S.dcur||S.hcur)+' a night':'')+'</span>'+(sel.t?'<span class="s">'+esc(sel.t)+'</span>':'')+'<span class="btn sm pri" style="margin-top:6px;justify-self:start">Choose this hotel</span></button>':'<p class="note">Tap a square to see the hotel. This is a simple sketch of the area.</p>');
+  }else body='<div id="hlist">'+hotelListHtml()+'</div>';
+  const cityNow=s.city!=='all'?s.city:cityKeys()[0];
+  return head('Choose a stay')+(s.from?'<div class="okbox num">Filling '+esc(fmtD(s.from))+' to '+esc(fmtD(s.to))+'</div>':'')+
+   '<div class="chips" role="group" aria-label="City">'+(cities.length>2?cities.map(c=>'<button class="chip" data-act="pcity" data-v="'+esc(c[0])+'" aria-pressed="'+(s.city===c[0])+'">'+esc(c[1])+'</button>').join(''):'')+'<button class="chip add" data-act="addcity" data-back="picker">+ Add city</button></div>'+
+   '<div class="sortrow"><div class="seg" role="group" aria-label="View"><button data-act="pview" data-v="list" aria-pressed="'+(s.view!=='map')+'">List</button><button data-act="pview" data-v="map" aria-pressed="'+(s.view==='map')+'">Map</button></div>'+(s.view==='map'?'':'<input id="hq" type="text" placeholder="Search hotels" value="'+esc(s.q||'')+'" style="max-width:220px" aria-label="Search hotels">')+'</div>'+
+   (s.err?'<p class="warnbox">'+esc(s.err)+'</p>':'')+body+
+   '<div class="btnrow wrapr">'+(cityNow?'<button class="btn"'+(U.busy.hot?' disabled':'')+' data-act="odhotels">'+(U.busy.hot?'Searching…':'Find more hotels (free)')+'</button>':'')+(SAMPLE&&cityNow?'<button class="btn"'+(U.busy.hot?' disabled':'')+' data-act="morehotels">'+ic('spark',1.8)+' '+(U.busy.hot?'Asking Claude…':'Find hotels with Claude')+'</button>':'')+'<button class="btn ghost" data-act="ownhotel">My hotel is not listed</button></div>';
+}
+function ownHotelSheet(){
+  const s=U.sheet,none=!cityKeys().length,city=s.city&&s.city!=='all'?s.city:cityKeys()[0],ar=city?areasFor(city):[];
+  return head('Add your own hotel')+'<div class="stack"><label class="f">Hotel name<input id="oh-n" type="text" maxlength="80" placeholder="Hotel name" value="'+esc(s.name||'')+'"></label>'+
+   (none?'<label class="f">City or area<input id="oh-ct" type="text" maxlength="40" placeholder="e.g. Lisbon"></label>':'<label class="f">City<select id="oh-c" data-chg="ohcity">'+cityOptions(city)+'</select></label><label class="f">Nearest area<select id="oh-a"><option value="">Not sure</option>'+ar.map((a,i)=>'<option value="'+i+'">'+esc(a[0])+'</option>').join('')+'</select></label><p class="note">The area places the hotel on the sketch map and decides which sights count as nearby.</p>')+
+   '<p id="oh-msg" class="warnbox" hidden></p><button class="btn pri" data-act="ohsave">Continue</button></div>';
+}
+function staySheet(){
+  const s=U.sheet,h=s.hid?hotelById(s.hid):null,ex=s.sid?S.stays.find(x=>x.id===s.sid):null;
+  const name=ex?ex.name:(h?h.n:''),inD=s.in||(ex?ex.in:''),outD=s.out||(ex?ex.out:'');
+  return head(ex?'Edit stay':'Stay dates')+'<div class="stack"><div class="card" style="box-shadow:none"><b class="disp">'+esc(name)+'</b></div>'+
+   '<div class="grid2"><label class="f">Check-in<input id="st-in" type="date" value="'+inD+'" data-chg="stv"></label><label class="f">Check-out<input id="st-out" type="date" value="'+outD+'" data-chg="stv"></label></div>'+
+   '<label class="f">Price per night ('+esc(S.dcur||'local')+', optional)<input id="st-rate" type="number" min="0" step="any" value="'+((ex&&ex.rate)||'')+'" placeholder="'+(h&&h.p?'Typical '+Math.round(h.p):'')+'"></label>'+
+   '<p id="st-msg" class="warnbox" hidden></p><div class="btnrow wrapr"><button class="btn pri" data-act="stsave">'+(ex?'Save changes':'Add stay')+'</button>'+(ex?'<button class="btn ghost" data-act="stdel">Remove stay</button>':'')+'</div></div>';
+}
+function customSheet(){
+  const s=U.sheet,tr=!!s.transit,cs=cityKeys().map(k=>cityName(k));
+  const day=(S.stays.find(x=>x.in<=s.d&&s.d<x.out)||{}).city,from=day?cityName(day):'';
+  return head(tr?'Add transit':'Your own activity')+'<div class="stack"><p class="note num">'+esc(fmtD(s.d,{weekday:'long',day:'numeric',month:'long'}))+'</p>'+
+   (tr?'<label class="f">How<select id="cu-m"><option>Train</option><option>Shinkansen / fast train</option><option>Bus</option><option>Flight</option><option>Ferry</option><option>Car or taxi</option><option>Metro</option><option>Walk</option></select></label><datalist id="cu-places">'+cs.map(c=>'<option value="'+esc(c)+'">').join('')+'</datalist><div class="grid2"><label class="f">From<input id="cu-from" type="text" list="cu-places" maxlength="40" value="'+esc(from)+'" placeholder="e.g. Tokyo"></label><label class="f">To<input id="cu-to" type="text" list="cu-places" maxlength="40" placeholder="e.g. Kyoto"></label></div><label class="f">Note (optional)<input id="cu-n" type="text" maxlength="80" placeholder="e.g. Nozomi 15, platform 14"></label>':'<label class="f">What<input id="cu-n" type="text" maxlength="80" placeholder="e.g. Dinner with friends"></label>')+
+   '<div class="grid3"><label class="f">Start<input id="cu-t" type="time"></label><label class="f">Hours<input id="cu-h" type="number" min="0.25" step="0.25" value="'+(tr?2:1.5)+'"></label><label class="f">Cost each<input id="cu-y" type="number" min="0" step="any" value="0"></label></div>'+
+   '<p id="cu-msg" class="warnbox" hidden></p><button class="btn pri" data-act="cusave">Add to this day</button></div>';
+}
+function ownPlaceSheet(){
+  const none=!cityKeys().length;
+  return head('Add your own place')+'<div class="stack"><label class="f">Name<input id="op-n" type="text" maxlength="80" placeholder="Place name"></label>'+
+   (none?'<label class="f">City or area<input id="op-ct" type="text" maxlength="40"></label>':'<label class="f">City<select id="op-c">'+cityOptions(U.city!=='all'?U.city:cityKeys()[0])+'</select></label>')+
+   '<div class="grid2"><label class="f">Type<select id="op-k"><option value="sight">Sight</option><option value="food">Food</option><option value="view">View</option><option value="culture">Culture</option><option value="nature">Nature</option><option value="fun">Fun</option></select></label><label class="f">Hours needed<input id="op-h" type="number" min="0.25" step="0.25" value="1.5"></label></div>'+
+   '<label class="f">Cost per person ('+esc(S.dcur||'local')+')<input id="op-y" type="number" min="0" step="any" value="0"></label><label class="f">Note (optional)<input id="op-t" type="text" maxlength="160"></label>'+
+   '<p id="op-msg" class="warnbox" hidden></p><button class="btn pri" data-act="opsave">Add place</button></div>';
+}
+function moreSheet(){
+  const none=!cityKeys().length;
+  return head('Find more places')+'<div class="stack"><p class="note">Free: finds sights near this city from Wikipedia and ranks them by how many people read about them. Prices are not listed, and times are typical for the type of place.</p>'+
+   (none?'<label class="f">City or area<input id="mo-ct" type="text" maxlength="40" value="'+esc(S.dest)+'"></label>':'<label class="f">City<select id="mo-city">'+cityOptions(U.city!=='all'?U.city:cityKeys()[0])+'</select></label>')+
+   '<button class="btn pri" data-act="odmore"'+(U.busy.more?' disabled':'')+'>'+(U.busy.more?'Searching…':'Find sights (free)')+'</button>'+(SAMPLE?'<p class="note" style="margin-top:6px">Or ask Claude. It uses a little of your Claude allowance and can include food and local tips.</p>':'')+(SAMPLE?'<label class="f">What kind<select id="mo-cat"><option value="">Anything</option><option value="food">Food</option><option value="view">Views</option><option value="sight">Sights</option><option value="culture">Culture</option><option value="nature">Nature</option><option value="fun">Fun</option></select></label>':'')+
+   (U.sheet.err?'<p class="warnbox">'+esc(U.sheet.err)+'</p>':'')+(SAMPLE?'<button class="btn" data-act="runmore"'+(U.busy.more?' disabled':'')+'>'+(U.busy.more?'Asking Claude…':'Ask Claude')+'</button>':'')+'</div>';
+}
+function addCitySheet(){
+  const s=U.sheet,packs=S.pack==='japan'?(JP.CEXTRA||[]).concat(JP.CORDER).filter(k=>!S.cities[k]):[],res=s.res||[];
+  return head('Add a city or area')+'<div class="stack"><p class="note">Search any city, town or area in the world. Sights come from Wikipedia and hotels from OpenStreetMap. It is free and uses no Claude credits.</p>'+
+   '<div class="searchrow"><input id="ac-n" type="text" maxlength="60" placeholder="e.g. Lisbon, Fujiyoshida, Hanoi" value="'+esc(s.q||'')+'" autocomplete="off"><button class="btn pri" data-act="citysearch"'+(U.busy.city?' disabled':'')+'>'+(U.busy.city?'Searching…':'Search')+'</button></div>'+
+   (s.err?'<p class="warnbox">'+esc(s.err)+'</p>':'')+
+   (U.busy.city&&s.step?'<div class="prog"><span class="spin"></span><span>'+esc(s.step)+'</span></div>':'')+
+   (res.length?'<div class="stack">'+res.map((r,i)=>'<button class="hotel" data-act="citypick" data-i="'+i+'"><b>'+esc(r.name)+'</b><span class="s">'+esc(r.full)+'</span></button>').join('')+'</div>':'')+
+   (s.q&&!U.busy.city?'<button class="btn ghost" data-act="citymanual" data-name="'+esc(s.q)+'">Add “'+esc(s.q)+'” without searching</button>':'')+
+   (packs.length?'<p class="note" style="margin-top:6px">Ready-made guides with ratings and costs:</p><div class="chips" style="flex-wrap:wrap;overflow:visible">'+packs.map(k=>'<button class="chip" data-act="addpack" data-v="'+k+'">'+esc(JP.CITIES[k].n)+'</button>').join('')+'</div>':'')+
+   '</div>';
+}
+function textSheet(){return head('Copy this text')+'<div class="stack"><p class="note">Your device blocked automatic copying. Select the text and copy it.</p><textarea id="tx" readonly>'+esc(U.sheet.text)+'</textarea></div>'}
+function tripsSheet(){
+  return head('Your trips')+'<div class="stack">'+DB.order.map(id=>{const t=DB.trips[id];return '<button class="hotel" data-act="opentrip" data-id="'+id+'"><b>'+esc(t.name)+(id===DB.active?' <span class="tag ok">Open</span>':'')+'</b><span class="s num">'+esc(fmtD(t.out.date,{day:'numeric',month:'short'}))+' to '+esc(fmtD(t.ret.date,{day:'numeric',month:'short',year:'numeric'}))+' · '+t.trav+' traveller'+(t.trav>1?'s':'')+'</span></button>'}).join('')+
+   '<div class="btnrow wrapr"><button class="btn pri" data-act="newtrip">Plan a new trip</button><button class="btn" data-act="importer">Open a trip code or backup</button></div></div>';
+}
+function importSheet(){
+  return head('Open a shared trip')+'<div class="stack"><p class="note">Paste a trip code your travel partner copied, or choose a backup file. It opens as a new trip and does not change your other trips.</p>'+
+   '<label class="f">Trip code<textarea id="im-code" rows="4" placeholder="WP1.…"></textarea></label><label class="f">Or a backup file<input id="im-file" type="file" accept=".json,application/json" data-chg="impfile"></label>'+
+   (U.sheet.err?'<p class="warnbox">'+esc(U.sheet.err)+'</p>':'')+'<button class="btn pri" data-act="doimport">Open trip</button></div>';
+}
+function setupSheet(){
+  let tz='';try{tz=Intl.DateTimeFormat().resolvedOptions().timeZone}catch(e){}
+  const g=AIRPORTS.find(a=>a.tz===tz)||AP.SYD,today=localToday();
+  return head('Plan a trip')+'<div class="stack"><label class="f">Where are you going?<input id="su-dest" type="text" list="su-list" maxlength="60" placeholder="A country or a city" autocomplete="off" data-chg="sudest"></label><datalist id="su-list">'+SUGGEST.map(x=>'<option value="'+x+'">').join('')+'</datalist>'+
+   '<div class="chips" aria-label="Ideas">'+SUGGEST.map(x=>'<button class="chip" data-act="sudest" data-v="'+x+'">'+x+'</button>').join('')+'</div>'+
+   '<label class="f">Trip name (optional)<input id="su-name" type="text" maxlength="60"></label>'+
+   '<div class="grid2"><label class="f">Leaving from<select id="su-from" data-chg="sufrom">'+apOptions(g.code)+'</select></label><label class="f">Landing in<select id="su-to" data-chg="suto"><option value="">Choose later</option>'+apOptions('')+'</select></label></div>'+
+   '<p class="note" style="margin-top:-4px">Airport not listed? Pick the closest and change it under Flights.</p>'+
+   '<div class="grid2"><label class="f">Leave on<input id="su-d1" type="date" value="'+addD(today,21)+'"></label><label class="f">Return on<input id="su-d2" type="date" value="'+addD(today,29)+'"></label></div>'+
+   '<div class="grid2"><label class="f">Travellers<input id="su-trav" type="number" min="1" max="12" value="2"></label><label class="f">Your currency<select id="su-hc" data-chg="suhc">'+curOpts(CUR_BY_CC[g.cc]||'USD')+'</select></label></div>'+
+   '<label class="f">Destination currency<select id="su-dc" data-chg="sudc">'+curOpts('','Work it out for me')+'</select></label>'+
+   '<p id="su-hint" class="note"></p><p id="su-msg" class="warnbox" hidden></p><button class="btn pri" data-act="sucreate">Create trip</button></div>';
+}
+
+/* ================= starter plan from Claude ================= */
+async function buildStarter(){
+  if(U.build&&!U.build.err)return;
+  const b={text:'Looking up '+S.dest+'…'};U.build=b;const T=S;render(true);
+  const live=()=>U.build===b&&S===T;
+  try{
+    let g=null;
+    try{g=(await geoSearch(S.dest))[0]}catch(e){if(!SAMPLE)throw e}
+    if(g&&live()){
+      const r=await odAddCity({name:S.dest,lat:g.lat,lon:g.lon,cc:g.cc,full:g.full,area:g.area,city:g.city},t=>{if(live()){b.text=t;render(true)}});
+      if(!live())return;
+      if(S.cities[r.ck]&&!cityKeys().length)ensureCity(S.dest,S.dest,g.lat,g.lon);
+      if(r.err&&!SAMPLE)throw r.err;
+      if(r.p||r.h){U.build=null;render(true);toast(S.dest+': '+r.p+' sights, '+r.h+' hotels found');return}
+    }
+    if(!SAMPLE)throw {code:'net'};
+    if(!T.ai.overview){b.text='Asking Claude about '+S.dest+'…';render(true);await aiOverview();persist()}
+    if(!live())return;
+    if(!cityKeys().length)ensureCity(S.dest,S.dest,null,null);
+    for(const ck of cityKeys().slice(0,3)){
+      if(!live())return;
+      b.text='Finding places in '+cityName(ck)+'…';render(true);
+      if(!S.places.some(p=>p.c===ck))await aiPlaces(ck);persist();
+      if(!live())return;
+      b.text='Finding hotels in '+cityName(ck)+'…';render(true);
+      if(!S.hotels.some(h=>h.c===ck))await aiHotels(ck);persist();
+    }
+    if(!live())return;
+    U.build=null;render(true);toast('Suggestions are ready');
+  }catch(e){if(U.build===b){U.build={err:e&&e.code?(odErr(e)):(aiErr(e)||'Something went wrong.')};render(true)}}
+}
+
+/* ================= actions ================= */
+function stayValid(){
+  const s=U.sheet,a=$('#st-in').value,b=$('#st-out').value,msg=$('#st-msg');let m='',info=false;
+  if(!a||!b)m='Choose both dates.';else if(diffD(a,b)<=0)m='Check-out must be after check-in.';
+  else{const o=S.stays.filter(x=>x.id!==s.sid&&x.in<b&&a<x.out);if(o.length){info=true;m='This overlaps '+o.map(x=>x.name).join(' and ')+'. When you save, that stay is shortened or split so your nights match (for example, back to Tokyo after a Fuji night).'}}
+  msg.hidden=!m;msg.textContent=m;msg.className=info?'okbox':'warnbox';return !m||info;
+}
+function fitStays(a,b,keep){
+  const out=[];
+  S.stays.forEach(x=>{
+    if(x.id===keep||!(x.in<b&&a<x.out)){out.push(x);return}
+    if(x.in<a&&x.out>b){out.push(Object.assign({},x,{out:a}));out.push(Object.assign({},x,{id:'s'+uid(),in:b}))}
+    else if(x.in<a){out.push(Object.assign({},x,{out:a}))}
+    else if(x.out>b){out.push(Object.assign({},x,{in:b}))}
+  });
+  S.stays=out;
+}
+function guardBuild(){if(U.build&&!U.build.err){toast('Wait for the suggestions to finish first');return true}return false}
+function pushTrip(t){addTrip(t);U.tab='trip';U.city='all';U.cat='all';U.target=null;U.ref=null;U.sel=null;U.sheet=null;renderSheet();render();window.scrollTo(0,0)}
+function setTab(t){U.tab=t;U.sheet=null;renderSheet();render();window.scrollTo(0,0)}
+const sameAp=(a,b)=>(!a&&!b)||(a&&b&&a.code===b.code&&a.city===b.city);
+let drT=null,drPending=false;
+function deferRender(){clearTimeout(drT);drT=setTimeout(()=>{const a=document.activeElement;if(a&&a.closest&&a.closest('.tm')){drPending=true}else render(true)},400)}
+document.addEventListener('focusout',e=>{if(drPending&&e.target.closest&&e.target.closest('.tm')){drPending=false;setTimeout(()=>{const a=document.activeElement;if(!(a&&a.closest&&a.closest('.tm')))render(true)},120)}});
+const A={
+ addcity:el=>{const back=el&&el.dataset&&el.dataset.back,p=U.sheet;openSheet({t:'addcity',back,from:back&&p?p.from:'',to:back&&p?p.to:''})},
+ addpack:el=>{
+  const k=el.dataset.v,x=JP.CITIES[k];if(!x||S.cities[k])return;
+  S.cities[k]={n:x.n,jp:x.jp,c:x.c,lat:x.lat,lon:x.lon};persist();U.city=k;U.sel=null;
+  const sh=U.sheet;closeSheet();render(true);toast(x.n+' added');
+  if(sh&&sh.back==='picker')openSheet({t:'picker',from:sh.from,to:sh.to,city:k,view:'list',q:'',sel:null});
+ },
+ citysearch:async()=>{
+  const s=U.sheet,q=cleanStr($('#ac-n').value,60);if(!q||U.busy.city)return;
+  s.q=q;s.err='';s.res=[];U.busy.city=true;s.step='Searching…';renderSheet();
+  try{s.res=await geoSearch(q);if(!s.res.length)s.err='Nothing found. Check the spelling or add it without searching.'}catch(e){s.err=odErr(e)}
+  U.busy.city=false;s.step='';if(U.sheet===s)renderSheet();
+ },
+ citypick:async el=>{
+  const s=U.sheet,g=(s.res||[])[+el.dataset.i];if(!g||U.busy.city)return;
+  U.busy.city=true;s.err='';s.res=[];s.step='Adding '+g.name+'…';renderSheet();
+  const r=await odAddCity(g,t=>{s.step=t;if(U.sheet===s)renderSheet()});
+  U.busy.city=false;U.city=r.ck;
+  if(r.err){s.err=odErr(r.err);s.step='';if(U.sheet===s)renderSheet();render(true);return}
+  const back=s.back,from=s.from,to=s.to;closeSheet();render(true);toast(g.name+' added: '+r.p+' sights, '+r.h+' hotels');
+  if(back==='picker')openSheet({t:'picker',from,to,city:r.ck,view:'list',q:'',sel:null});
+ },
+ citymanual:el=>{
+  const n=cleanStr(el.dataset.name,40),s=U.sheet;if(!n)return;
+  const ck=cityKeys().find(k=>cityName(k).toLowerCase()===n.toLowerCase())||ensureCity(n,n,null,null);persist();U.city=ck;
+  const back=s.back,from=s.from,to=s.to;closeSheet();render(true);toast(n+' added');
+  if(back==='picker')openSheet({t:'picker',from,to,city:ck,view:'list',q:'',sel:null});
+ },
+ odhotels:async()=>{
+  const s=U.sheet,ck=s.city!=='all'?s.city:cityKeys()[0];if(!ck||U.busy.hot)return;
+  U.busy.hot=true;s.err='';renderSheet();
+  try{const n=await odHotels(ck);persist();if(!n)s.err='No more hotels found nearby on the map.'}catch(e){s.err=e&&e.code==='nocoord'?'This city has no map position yet. Add it again with Search.':odErr(e)}
+  U.busy.hot=false;if(U.sheet===s)renderSheet();
+ },
+ hotelsearch:async el=>{
+  const s=U.sheet,q=el.dataset.name;if(U.busy.look)return;U.busy.look=true;s.err='';renderSheet();
+  try{const near=s.city!=='all'?cityName(s.city):'';s.hres=await geoSearch(q+(near?' '+near:''));if(!s.hres.length)s.err='The map could not find that name. Add it with “My hotel is not listed”.'}catch(e){s.err=odErr(e)}
+  U.busy.look=false;if(U.sheet===s)renderSheet();
+ },
+ hotelfound:el=>{
+  const s=U.sheet,g=(s.hres||[])[+el.dataset.i];if(!g)return;
+  let ck=null,best=40;cityKeys().forEach(k=>{const c=S.cities[k];if(c&&c.lat!=null){const d=km({lat:c.lat,lon:c.lon},g);if(d<best){best=d;ck=k}}});
+  if(!ck){const nm=g.city||g.name;ck=ensureCity(nm,nm,g.lat,g.lon);setCityGeo(ck,g)}
+  const id='h'+uid();S.hotels.push({id,n:g.name,c:ck,a:g.area,lat:+g.lat.toFixed(5),lon:+g.lon.toFixed(5),p:0,t:'Found on the map',src:'osm'});persist();
+  openSheet({t:'stay',hid:id,in:s.from||'',out:s.to||''});
+ },
+ odmore:async()=>{
+  const s=U.sheet;if(U.busy.more)return;let ck;
+  if($('#mo-ct')){const t=$('#mo-ct').value.trim();if(!t)return;ck=ensureCity(t,t,null,null)}else ck=$('#mo-city').value;
+  U.busy.more=true;s.err='';renderSheet();
+  try{
+   const c=S.cities[ck];if(c.lat==null){const g=(await geoSearch(c.n+' '+S.dest))[0];if(!g)throw {code:'nocoord'};setCityGeo(ck,g)}
+   const n=await odPlaces(ck);persist();U.busy.more=false;closeSheet();U.city=ck;U.cat='all';render(true);toast(n?'Added '+n+' places':'No new places found nearby')
+  }catch(e){U.busy.more=false;s.err=e&&e.code==='nocoord'?'Could not find that place on the map.':odErr(e);if(U.sheet===s)renderSheet()}
+ },
+ findflights:async el=>{
+  const w=el.dataset.w,f=S[w],k='ff'+w;if(U.busy[k])return;U.busy[k]=true;render(true);
+  try{const n=await aiFlights(f);persist();if(!n)toast('Claude could not name flights for this route')}catch(e){toast(aiErr(e)||'Something went wrong.')}
+  U.busy[k]=false;render(true);
+ },
+ sudest:el=>{const i=$('#su-dest');i.value=el.dataset.v;i.dispatchEvent(new Event('change',{bubbles:true}))},
+ sucreate:()=>{
+  const dest=$('#su-dest').value.trim(),m=$('#su-msg'),err=t=>{m.hidden=false;m.textContent=t};
+  const d1=$('#su-d1').value,d2=$('#su-d2').value,trav=Math.round(num($('#su-trav').value)),hc=$('#su-hc').value,dc=$('#su-dc').value;
+  if(!dest)return err('Enter where you are going.');
+  if(!d1||!d2||diffD(d1,d2)<1)return err('Choose a return date after the day you leave.');
+  if(diffD(d1,d2)>120)return err('Trips longer than 120 days are not supported.');
+  if(trav<1||trav>12)return err('Travellers must be between 1 and 12.');
+  const hint=HINTS[dest.toLowerCase()],pack=hint&&hint.pack,cur=pack?'JPY':(dc||hc);
+  const t=newTrip({dest,name:$('#su-name').value.trim()||dest,pack,home:AP[$('#su-from').value],to:AP[$('#su-to').value]||null,depart:d1,back:d2,hcur:hc,dcur:cur,trav});
+  if(!pack&&!dc)t.dcurAuto=true;
+  if(pack){t.cities=jpCities();t.food=6000;t.trans=1500}
+  if(hc===cur)t.rate=1;else if(pack&&hc==='AUD'){t.rate=109.9;t.rateNote='Mid-market rate on 16 October 2026. Your bank will give a little less.'}
+  pushTrip(t);persist();
+  if(!pack)buildStarter();
+ },
+ addvia:el=>{const f=S[el.dataset.w];(f.via=f.via||[]).push({code:'',mins:90});persist();render(true)},
+ rmvia:el=>{const f=S[el.dataset.w];f.via.splice(+el.dataset.i,1);f.arr='';persist();render(true)},
+ tab:el=>setTab(el.dataset.v),
+ settings:()=>openSheet({t:'settings'}),
+ close:()=>closeSheet(),
+ toastact:()=>{const f=toastFn;toastFn=null;$('#toast').hidden=true;if(f)f()},
+ goday:el=>{const e=document.getElementById('day-'+el.dataset.d);if(e)e.scrollIntoView({behavior:'smooth',block:'start'})},
+ addday:el=>{U.target=el.dataset.d;U.city=cityOfDay(el.dataset.d)||'all';U.view='list';U.ref=null;setTab('explore')},
+ customitem:el=>openSheet({t:'custom',d:el.dataset.d}),
+ transititem:el=>openSheet({t:'custom',d:el.dataset.d,transit:true}),
+ rmitem:el=>{const d=el.dataset.d;S.plan[d].splice(+el.dataset.i,1);if(!S.plan[d].length)delete S.plan[d];persist();render(true)},
+ cur:el=>{S.show=el.dataset.v;persist();render(true)},
+ copy:()=>copyText(itinText(),'Itinerary copied'),
+ savetxt:()=>saveFile(slug(S.name)+'-itinerary.txt',itinText(),'text/plain'),
+ saveics:()=>saveFile(slug(S.name)+'.ics',buildIcs(),'text/calendar'),
+ savejson:()=>saveFile(slug(S.name)+'-backup.json',JSON.stringify(S),'application/json'),
+ code:async()=>{try{await copyText(await tripCode(),'Trip code copied. Send it to your travel partner.')}catch(e){toast('Could not make a trip code')}},
+ clearauto:()=>{const n=clearAuto();persist();render(true);toast('Removed '+n+' suggested activit'+(n===1?'y':'ies'))},
+ autoplan:()=>{const snap=JSON.stringify(S.plan),n=autoPlanAll();persist();render(true);toast(n?'Planned '+n+' day'+(n>1?'s':'')+'. Check opening days before you go.':'No days could be planned',n?'Undo':'',()=>{S.plan=JSON.parse(snap);persist();render(true)})},
+ autoday:el=>{const snap=JSON.stringify(S.plan),n=autoDay(el.dataset.d,usedIds());if(n){persist();render(true);toast('Suggested a day','Undo',()=>{S.plan=JSON.parse(snap);persist();render(true)})}else toast('Nothing suitable left for this day')},
+ build:()=>buildStarter(),
+ buildstop:()=>{U.build=null;render(true)},
+ newtrip:()=>{if(guardBuild())return;openSheet({t:'setup'})},
+ trips:()=>openSheet({t:'trips'}),
+ importer:()=>openSheet({t:'importer'}),
+ opentrip:el=>{if(guardBuild())return;setActive(el.dataset.id);U.city='all';U.target=null;U.ref=null;closeSheet();render();window.scrollTo(0,0)},
+ deltrip1:()=>{U.sheet.del=true;renderSheet()},
+ deltrip2:()=>{if(guardBuild())return;const n=S.name;deleteTrip(S.id);closeSheet();render();toast('Deleted '+n)},
+ pickstay:el=>{const from=el.dataset.from||'';openSheet({t:'picker',from,to:el.dataset.to||'',city:from?(cityOfDay(from)||'all'):'all',view:'list',q:'',sel:null})},
+ editstay:el=>openSheet({t:'stay',sid:el.dataset.sid}),
+ near:el=>{const s=S.stays.find(x=>x.id===el.dataset.sid);U.ref=s.id;U.city=s.city;U.sort='near';U.view='list';U.target=null;setTab('explore')},
+ pcity:el=>{U.sheet.city=el.dataset.v;U.sheet.sel=null;U.sheet.err='';renderSheet()},
+ pview:el=>{U.sheet.view=el.dataset.v;renderSheet()},
+ pin:el=>{const id=el.dataset.id;if(U.sheet&&U.sheet.t==='picker'){U.sheet.sel=id.slice(2);renderSheet()}else{U.sel=id;render(true)}},
+ hpick:el=>{const s=U.sheet;openSheet({t:'stay',hid:el.dataset.id,in:s.from||'',out:s.to||''})},
+ ownhotel:el=>openSheet({t:'ownhotel',city:U.sheet.city,from:U.sheet.from,to:U.sheet.to,name:(el&&el.dataset&&el.dataset.name)||''}),
+ lookuphotel:async el=>{
+  const s=U.sheet,name=el.dataset.name;if(U.busy.look)return;U.busy.look=true;s.err='';renderSheet();
+  try{
+   const city=s.city!=='all'?cityName(s.city):S.dest;
+   const o=await ask('A traveller is going to '+S.dest+' and wants to book the hotel "'+name+'" (probably in or near '+city+'). Identify it. Reply with JSON only: {"found":true or false,"name":"official hotel name","city":"city","area":"neighbourhood","lat":number,"lon":number,"price":typical nightly price for 2 in '+(S.dcur||'local currency')+' as a number,"tag":"under 10 words about it"}. If you are not confident the hotel exists, set found to false.');
+   if(!o||!o.found||!goodLat(o.lat)||!goodLon(o.lon))throw new Error('Claude could not place that hotel. Use “My hotel is not listed” to add it by area.');
+   const nm=cleanStr(o.name||name,80),cn=cleanStr(o.city,40)||S.dest;
+   const keys=cityKeys(),hit=keys.find(k=>cityName(k).toLowerCase()===cn.toLowerCase());
+   const ck=hit||ensureCity(cn,cn,+o.lat,+o.lon);
+   const id='h'+uid();S.hotels.push({id,n:nm,c:ck,a:cleanStr(o.area,40),lat:+o.lat,lon:+o.lon,p:Math.max(0,Math.round(num(o.price))),t:cleanStr(o.tag,100),src:'ai'});persist();
+   U.busy.look=false;openSheet({t:'stay',hid:id,in:s.from||'',out:s.to||''});return;
+  }catch(e){s.err=e&&e.message&&!e.code?e.message:(aiErr(e)||'Something went wrong.')}
+  U.busy.look=false;if(U.sheet===s)renderSheet();
+ },
+ morehotels:async()=>{
+  const s=U.sheet,ck=s.city!=='all'?s.city:cityKeys()[0];if(!ck||U.busy.hot)return;
+  U.busy.hot=true;s.err='';renderSheet();
+  try{const n=await aiHotels(ck);persist();if(!n)s.err='Claude had no new hotels to add for this city.'}catch(e){s.err=aiErr(e)||'Something went wrong.'}
+  U.busy.hot=false;if(U.sheet===s)renderSheet();
+ },
+ ohsave:()=>{
+  const n=$('#oh-n').value.trim(),m=$('#oh-msg');if(!n){m.hidden=false;m.textContent='Enter the hotel name.';return}
+  let ck,lat=null,lon=null,area='';
+  if($('#oh-ct')){const t=$('#oh-ct').value.trim();if(!t){m.hidden=false;m.textContent='Enter the city or area.';return}ck=ensureCity(t,t,null,null)}
+  else{ck=$('#oh-c').value;const ai=$('#oh-a').value;if(ai!==''){const a=areasFor(ck)[+ai];if(a){area=a[0];lat=a[1];lon=a[2]}}}
+  const id='u'+uid();S.hotels.push({id,n,c:ck,a:area,lat,lon,p:0,t:'Added by you',src:'user'});persist();
+  openSheet({t:'stay',hid:id,in:U.sheet.from||'',out:U.sheet.to||''});
+ },
+ stsave:()=>{
+  if(!stayValid())return;
+  const s=U.sheet,a=$('#st-in').value,b=$('#st-out').value,r=num($('#st-rate').value),snap=JSON.stringify(S.stays);
+  let keep=s.sid;
+  if(s.sid){const x=S.stays.find(y=>y.id===s.sid);x.in=a;x.out=b;x.rate=r}
+  else{const h=hotelById(s.hid);keep='s'+uid();S.stays.push({id:keep,hid:h.id,name:h.n,city:h.c,area:h.a,lat:h.lat,lon:h.lon,p:h.p||0,in:a,out:b,rate:r,src:h.src||'pack'})}
+  fitStays(a,b,keep);
+  const changed=snap!==JSON.stringify(S.stays);
+  persist();closeSheet();render(true);toast('Stay saved','Undo',()=>{S.stays=JSON.parse(snap);persist();render(true)});
+ },
+ stdel:()=>{S.stays=S.stays.filter(x=>x.id!==U.sheet.sid);persist();closeSheet();toast('Stay removed');render(true)},
+ city:el=>{U.city=el.dataset.v;U.sel=null;render(true)},
+ cat:el=>{U.cat=el.dataset.v;U.sel=null;render(true)},
+ sort:el=>{U.sort=el.dataset.v;render(true)},
+ view:el=>{U.view=el.dataset.v;U.sel=null;render(true)},
+ cleartarget:()=>{U.target=null;render(true)},
+ add:el=>{const id=el.dataset.id;if(U.target){(S.plan[U.target]=S.plan[U.target]||[]).push({id,t:''});persist();toast('Added to '+fmtD(U.target,{weekday:'short',day:'numeric',month:'short'}));render(true)}else openSheet({t:'day',id})},
+ pickday:el=>{const id=U.sheet.id,d=el.dataset.d;closeSheet();(S.plan[d]=S.plan[d]||[]).push({id,t:''});persist();toast('Added to '+fmtD(d,{weekday:'short',day:'numeric',month:'short'}));render(true)},
+ cusave:()=>{
+  let n=$('#cu-n').value.trim();const m=$('#cu-msg');
+  if(U.sheet.transit){const fr=$('#cu-from').value.trim(),to=$('#cu-to').value.trim();if(!fr||!to){m.hidden=false;m.textContent='Enter where from and where to.';return}n=$('#cu-m').value+': '+fr+' → '+to+(n?' ('+n+')':'')}
+  else if(!n){m.hidden=false;m.textContent='Enter what you are doing.';return}
+  const d=U.sheet.d;(S.plan[d]=S.plan[d]||[]).push({id:'c'+uid(),custom:1,n,t:$('#cu-t').value,h:num($('#cu-h').value,1)||1,y:num($('#cu-y').value)});persist();closeSheet();render(true);
+ },
+ ownplace:()=>openSheet({t:'ownplace'}),
+ opsave:()=>{
+  const n=$('#op-n').value.trim(),m=$('#op-msg');if(!n){m.hidden=false;m.textContent='Enter the place name.';return}
+  let ck;if($('#op-ct')){const t=$('#op-ct').value.trim();if(!t){m.hidden=false;m.textContent='Enter the city or area.';return}ck=ensureCity(t,t,null,null)}else ck=$('#op-c').value;
+  const h=clamp(num($('#op-h').value,1.5),0.25,12);
+  S.places.push({id:'u'+uid(),n,c:ck,a:'',lat:null,lon:null,k:$('#op-k').value,s:4.3,h1:h,h2:h,y:Math.max(0,num($('#op-y').value)),yl:'',st:'',ln:'',t:cleanStr($('#op-t').value,160),src:'user'});
+  persist();closeSheet();U.city=ck;render(true);toast('Place added');
+ },
+ more:()=>openSheet({t:'more'}),
+ runmore:async()=>{
+  const s=U.sheet;if(U.busy.more)return;let ck;
+  if($('#mo-ct')){const t=$('#mo-ct').value.trim();if(!t)return;ck=ensureCity(t,t,null,null)}else ck=$('#mo-city').value;
+  const cat=$('#mo-cat').value;U.busy.more=true;s.err='';renderSheet();
+  try{const n=await aiPlaces(ck,cat||undefined);persist();U.busy.more=false;closeSheet();U.city=ck;U.cat='all';render(true);toast(n?'Added '+n+' places':'Claude had nothing new to add for this search')}
+  catch(e){U.busy.more=false;s.err=aiErr(e)||'Something went wrong.';if(U.sheet===s)renderSheet()}
+ },
+ doimport:async()=>{
+  const s=U.sheet,c=$('#im-code').value.trim();
+  try{if(!c)throw new Error('Paste a trip code or choose a file.');const t=await parseTrip(c);pushTrip(t);persist();toast('Trip opened')}catch(e){s.err=e.message||'Could not open that trip.';renderSheet()}
+ }
+};
+const C={
+ f:el=>{
+  const w=el.dataset.w,f=S[w],k=el.dataset.k,v=el.value;
+  if(k==='fl')applyFlightPick(f,v);
+  else if(k==='date'){if(!v)return;f.date=v;const r=flightChoices(f).find(x=>x.id===f.fl);if(r&&r.late){f.dep=f.date<r.lateUntil?r.late:r.dep;f.dur=f.date<r.lateUntil?r.lateDur:r.dur}
+    if(w==='out'&&diffD(S.out.date,S.ret.date)<1){S.ret.date=addD(S.out.date,1);toast('Return date moved to '+fmtD(S.ret.date))}
+    if(w==='ret'&&diffD(S.out.date,S.ret.date)<1){S.ret.date=addD(S.out.date,1);toast('Return must be after you leave')}}
+  else if(k==='dep'){f.dep=v;f.arr='';f.board=''}
+  else if(k==='alsel'){if(v==='__other'){f.alo=1;f.al=''}else{f.alo=0;f.al=v}}
+  else if(k==='al'){f.al=v.trim().slice(0,40)}
+  else if(k==='num'){f.num=v.trim().toUpperCase().slice(0,8)}
+  else f[k]=v;
+  persist();if(k==='dep'||k==='board'||k==='arr')deferRender();else render(true);
+ },
+ tm:el=>{
+  const box=el.closest('.tm'),sel=box.querySelectorAll('select'),h=sel[0].value,m=sel[1].value;
+  let v='';if(h!==''){v=pad(+h)+':'+pad(m===''?0:+m)}
+  const d=el.dataset,fake={dataset:{w:d.w,k:d.k,d:d.d,i:d.i},value:v};
+  if(h===''){sel[1].value=''}else if(m===''){sel[1].value='0'}
+  C[d.ch](fake);
+ },
+ via:el=>{
+  const f=S[el.dataset.w],x=f.via[+el.dataset.i];if(!x)return;
+  if(el.dataset.k==='code')x.code=el.value;else x.mins=num(el.value,90);
+  f.arr='';persist();render(true);
+ },
+ ap:el=>{
+  const [w,side]=el.dataset.k.split('.'),f=S[w],old=f[side],v=el.value;let obj=null;
+  if(v==='OTHER'){let tz='UTC';try{tz=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC'}catch(e){}obj={code:'OTH',city:'My airport',tz,cc:''}}else if(v)obj=AP[v];
+  f[side]=obj;
+  const mw=w==='out'?'ret':'out',ms=w==='out'?(side==='to'?'from':'to'):(side==='from'?'to':'from'),mf=S[mw];
+  const reset=x=>{x.fl='';x.dep='';x.dur=0;x.al='';x.num='';x.arr='';x.board=''};
+  reset(f);if(!mf[ms]||sameAp(mf[ms],old)){mf[ms]=obj;reset(mf)}
+  persist();render(true);
+ },
+ apc:el=>{
+  const [w,side]=el.dataset.k.split('.'),f=S[w],o=f[side];if(!o||o.code!=='OTH')return;
+  const mw=w==='out'?'ret':'out',ms=w==='out'?(side==='to'?'from':'to'):(side==='from'?'to':'from'),mo=S[mw][ms],same=mo&&mo.code==='OTH'&&mo.city===o.city&&mo.tz===o.tz;
+  const apply=x=>{if(el.dataset.f==='city')x.city=el.value.trim().slice(0,40)||'My airport';else if(validTz(el.value))x.tz=el.value};
+  apply(o);if(same&&mo!==o)apply(mo);persist();render(true);
+ },
+ itime:el=>{const it=S.plan[el.dataset.d][+el.dataset.i];if(it){it.t=el.value;it.auto=false;persist();deferRender()}},
+ rate:el=>{const s=S.stays.find(x=>x.id===el.dataset.sid);if(s){s.rate=num(el.value);persist();render(true)}},
+ chk:el=>{S.check[el.dataset.id]=el.checked;persist();render(true)},
+ set:el=>{
+  const k=el.dataset.k;
+  if(k==='name')S.name=el.value.trim().slice(0,60)||S.dest;
+  else if(k==='hcur'||k==='dcur'){S[k]=el.value;if(S.hcur&&S.dcur&&S.hcur===S.dcur)S.rate=1;else if(S.rate===1)S.rate=0;S.rateNote=''}
+  else{let v=parseFloat(el.value);if(isNaN(v)||v<0)return;if(k==='trav')v=clamp(Math.round(v),1,12);if(k==='rate'&&v<=0)return;S[k]=v;if(k==='rate')S.rateNote=''}
+  persist();render(true);if(k==='hcur'||k==='dcur')renderSheet();
+ },
+ stv:()=>stayValid(),
+ ohcity:el=>{const a=$('#oh-a');if(a)a.innerHTML='<option value="">Not sure</option>'+areasFor(el.value).map((x,i)=>'<option value="'+i+'">'+esc(x[0])+'</option>').join('')},
+ impfile:async el=>{const s=U.sheet,fl=el.files&&el.files[0];if(!fl)return;try{if(fl.size>5e6)throw new Error('That file is too large.');const t=validateImport(JSON.parse(await fl.text()));pushTrip(t);persist();toast('Trip opened')}catch(e){s.err=e.message&&e.message.indexOf('JSON')<0?e.message:'That file is not a Waypoint backup.';renderSheet()}},
+ sudest:()=>{
+  const h=HINTS[$('#su-dest').value.trim().toLowerCase()],hint=$('#su-hint');
+  if(h){const to=$('#su-to'),dc=$('#su-dc');if(!to.dataset.touched)to.value=h.ap;if(!dc.dataset.touched)dc.value=h.cur}
+  hint.textContent=h&&h.pack?'Ready-made guide with ratings, costs and hotels included.':'Sights and hotels are found for you from free map data after you create the trip.';
+ },
+ sufrom:el=>{const a=AP[el.value],hc=$('#su-hc');if(a&&!hc.dataset.touched&&CUR_BY_CC[a.cc])hc.value=CUR_BY_CC[a.cc]},
+ suto:el=>{el.dataset.touched=1},
+ suhc:el=>{el.dataset.touched=1},
+ sudc:el=>{el.dataset.touched=1}
+};
+document.addEventListener('click',e=>{const el=e.target.closest('[data-act]');if(!el)return;const a=A[el.dataset.act];if(a)a(el,e)});
+document.addEventListener('change',e=>{const el=e.target.closest('[data-chg]');if(!el)return;const c=C[el.dataset.chg];if(c)c(el)});
+document.addEventListener('input',e=>{const t=e.target;if(t&&t.id==='hq'){U.sheet.q=t.value;const l=$('#hlist');if(l)l.innerHTML=hotelListHtml()}if(t&&t.id==='su-dest')C.sudest()});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&U.sheet)closeSheet();
+  if(e.key==='Enter'&&e.target&&e.target.id==='ac-n'){e.preventDefault();A.citysearch()}
+  if((e.key==='Enter'||e.key===' ')&&e.target&&e.target.getAttribute&&e.target.getAttribute('role')==='button'&&e.target.dataset.act){e.preventDefault();A[e.target.dataset.act](e.target)}
+});
+
+/* ================= render and boot ================= */
+function render(keep){
+  const sy=window.scrollY;
+  $('#hdr').innerHTML=hdrHtml();
+  $('#main').innerHTML=U.tab==='trip'?tripHtml():U.tab==='flights'?flightsHtml():U.tab==='stays'?staysHtml():U.tab==='explore'?exploreHtml():guideHtml();
+  $('#nav').innerHTML=navHtml();
+  if(keep)window.scrollTo(0,sy);
+}
+loadDB();render();
+if(IN_VIEWER){
+  Promise.all([window.claude.use('sample').catch(()=>null),window.claude.use('downloads').catch(()=>null)]).then(r=>{SAMPLE=r[0]||null;DL=r[1]||null;render(true)});
+}else if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+
+</script></body></html>
